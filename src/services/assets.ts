@@ -1,3 +1,9 @@
+import bomberFlybyUrl from "../assets/audio/bomber_flyby.mp3";
+import defeatUrl from "../assets/audio/defeat.mp3";
+import victoryUrl from "../assets/audio/victory.mp3";
+import waterMissUrl from "../assets/audio/water_miss.mp3";
+import whizzHitUrl from "../assets/audio/whizz_hit.mp3";
+
 export type AssetKind = "audio" | "texture" | "sprite";
 
 export interface AssetEntry {
@@ -6,12 +12,12 @@ export interface AssetEntry {
   path: string;
   description: string;
 }
-
 export const assetManifest: AssetEntry[] = [
-  { key: "shot", kind: "audio", path: "/assets/audio/shot.mp3", description: "Shot launch sound" },
-  { key: "hit", kind: "audio", path: "/assets/audio/hit.mp3", description: "Explosion or impact sound" },
-  { key: "miss", kind: "audio", path: "/assets/audio/miss.mp3", description: "Water splash sound" },
-  { key: "victory", kind: "audio", path: "/assets/audio/victory.mp3", description: "Victory sting" },
+  { key: "flyby", kind: "audio", path: bomberFlybyUrl, description: "Bomber plane flyby" },
+  { key: "hit", kind: "audio", path: whizzHitUrl, description: "Successful ship hit" },
+  { key: "miss", kind: "audio", path: waterMissUrl, description: "Water splash miss" },
+  { key: "victory", kind: "audio", path: victoryUrl, description: "Victory sting" },
+  { key: "defeat", kind: "audio", path: defeatUrl, description: "Defeat sting" },
   { key: "water", kind: "texture", path: "/assets/textures/water.png", description: "Board water texture" },
   { key: "ship", kind: "texture", path: "/assets/textures/ship.png", description: "Ship hull texture" },
   { key: "marker-hit", kind: "sprite", path: "/assets/sprites/hit.png", description: "Hit marker sprite" },

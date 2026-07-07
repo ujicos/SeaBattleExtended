@@ -131,6 +131,7 @@ function App() {
   }
 
   function playAttackVisual(board: "local" | "remote", coord: Coordinate, result: AttackAnimation["result"]) {
+    audio.play("flyby");
     setAttackVisual({
       id: crypto.randomUUID(),
       board,
@@ -329,6 +330,7 @@ function App() {
   }
 
   function endMatch(result: "win" | "loss", state = game) {
+    audio.play(result === "win" ? "victory" : "defeat");
     const durationMs = Math.round((state.endedAt ?? performance.now()) - (state.startedAt ?? performance.now()));
     setStats((current) =>
       recordMatch(current, {
