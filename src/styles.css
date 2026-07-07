@@ -996,6 +996,21 @@ select {
   white-space: nowrap;
 }
 
+.copy-toast {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 20;
+  padding: 10px 14px;
+  border: 1px solid rgba(72, 208, 187, 0.52);
+  border-radius: 999px;
+  color: #eafffb;
+  background: rgba(7, 28, 36, 0.92);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
+  animation: copy-toast-fade 1400ms ease forwards;
+  pointer-events: none;
+}
+
 .compact-action {
   width: auto;
   min-width: 76px;
@@ -1127,6 +1142,22 @@ select {
   100% {
     opacity: 0;
     transform: translateY(-10px) scale(1.25);
+  }
+}
+
+@keyframes copy-toast-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  14%,
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
   }
 }
 

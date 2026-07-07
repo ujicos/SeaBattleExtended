@@ -91,6 +91,7 @@ function App() {
   const [selectedTarget, setSelectedTarget] = useState<Coordinate | null>(null);
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
+  const [copyNotice, setCopyNotice] = useState("");
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -98,6 +99,7 @@ function App() {
   const remoteBoardReadyRef = useRef<BoardState | null>(null);
   const boardSwitchTimer = useRef<number | null>(null);
   const boardReturnTimer = useRef<number | null>(null);
+  const copyNoticeTimer = useRef<number | null>(null);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
   const selectedShip = config.fleet.find((ship) => ship.id === game.selectedShipId);
@@ -183,6 +185,25 @@ function App() {
     audio.play("hit", volume);
   }
 
+  async function copyToClipboard(value: string): Promise<void> {
+    if (!value) {
+      return;
+    }
+    try {
+      await navigator.clipboard?.writeText(value);
+    } catch {
+      // The toast is still useful feedback if a browser blocks clipboard access.
+    }
+    setCopyNotice("Copied!");
+    if (copyNoticeTimer.current !== null) {
+      window.clearTimeout(copyNoticeTimer.current);
+    }
+    copyNoticeTimer.current = window.setTimeout(() => {
+      copyNoticeTimer.current = null;
+      setCopyNotice("");
+    }, 1400);
+  }
+
   function showBattleBoard(view: BattleBoardView, holdMs = 0, delayMs = 0) {
     if (boardSwitchTimer.current !== null) {
       window.clearTimeout(boardSwitchTimer.current);
@@ -217,6 +238,14 @@ function App() {
 
   useEffect(() => {
     void loadAppVersion().then(setAppVersion);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyNoticeTimer.current !== null) {
+        window.clearTimeout(copyNoticeTimer.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -739,7 +768,7 @@ function App() {
                         <strong>{roomCode}</strong>
                       </div>
                       {peerRole === "host" && (
-                        <button className="secondary compact-action" type="button" onClick={() => void navigator.clipboard?.writeText(roomCode)}>
+                        <button className="secondary compact-action" type="button" onClick={() => void copyToClipboard(roomCode)}>
                           Copy
                         </button>
                       )}
@@ -751,7 +780,7 @@ function App() {
                         <small>Join link</small>
                         <strong>{shareLink}</strong>
                       </div>
-                      <button className="secondary compact-action" type="button" onClick={() => void navigator.clipboard?.writeText(shareLink)}>
+                      <button className="secondary compact-action" type="button" onClick={() => void copyToClipboard(shareLink)}>
                         Copy
                       </button>
                     </div>
@@ -889,7 +918,7 @@ function App() {
                   <small>Share link</small>
                   <strong>{shareLink}</strong>
                 </div>
-                <button className="secondary compact-action" type="button" onClick={() => void navigator.clipboard?.writeText(shareLink)}>
+                <button className="secondary compact-action" type="button" onClick={() => void copyToClipboard(shareLink)}>
                   Copy
                 </button>
               </div>
@@ -925,6 +954,7 @@ function App() {
         />
       )}
       {activeTab === "stats" && <StatsPanel stats={stats} />}
+      {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}
     </main>
   );
 }
