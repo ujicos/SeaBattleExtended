@@ -151,6 +151,45 @@ export function recordMatch(stats: PlayerStats, record: MatchRecord): PlayerStat
   };
 }
 
+export function removeMatch(stats: PlayerStats, matchId: string): PlayerStats {
+  const record = stats.history.find((entry) => entry.id === matchId);
+  if (!record) {
+    return stats;
+  }
+
+  const won = record.result === "win";
+  const history = stats.history.filter((entry) => entry.id !== matchId);
+  const nextOpponents = { ...stats.opponents };
+  const opponent = nextOpponents[record.opponent.playerId];
+  if (opponent) {
+    const games = Math.max(0, opponent.games - 1);
+    if (games === 0) {
+      delete nextOpponents[record.opponent.playerId];
+    } else {
+      nextOpponents[record.opponent.playerId] = {
+        ...opponent,
+        games,
+        wins: Math.max(0, opponent.wins - (won ? 1 : 0)),
+        losses: Math.max(0, opponent.losses - (won ? 0 : 1))
+      };
+    }
+  }
+
+  const winDurations = history.filter((entry) => entry.result === "win").map((entry) => entry.durationMs);
+  const allDurations = history.map((entry) => entry.durationMs);
+
+  return {
+    ...stats,
+    totalGames: Math.max(0, stats.totalGames - 1),
+    wins: Math.max(0, stats.wins - (won ? 1 : 0)),
+    losses: Math.max(0, stats.losses - (won ? 0 : 1)),
+    fastestWinMs: winDurations.length ? Math.min(...winDurations) : null,
+    longestGameMs: allDurations.length ? Math.max(...allDurations) : null,
+    opponents: nextOpponents,
+    history
+  };
+}
+
 export function exportProfile(profile: PlayerProfile, stats: PlayerStats): string {
   const bundle: ExportBundle = {
     exportedAt: new Date().toISOString(),

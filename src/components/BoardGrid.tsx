@@ -1,4 +1,4 @@
-import { Waves } from "lucide-react";
+import { ChevronDown, Waves } from "lucide-react";
 import { coordKey, findShipAt, getShipBufferCells, getVisibleCell, isShipSunk } from "../game/board";
 import type { BoardState, Coordinate, Orientation, PlacedShip, ShipDefinition, ShotResult } from "../types/game";
 
@@ -22,6 +22,9 @@ interface BoardGridProps {
   attackAnimation?: AttackAnimation | null;
   compact?: boolean;
   label: string;
+  collapsible?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export function isSunkBufferCoord(board: BoardState, coord: Coordinate): boolean {
@@ -94,7 +97,10 @@ export function BoardGrid({
   preview,
   attackAnimation,
   compact = false,
-  label
+  label,
+  collapsible = false,
+  expanded = true,
+  onToggleExpand
 }: BoardGridProps) {
   const previewMap = new Map(preview?.cells.map((cell) => [coordKey(cell), preview.valid ? "valid" : "invalid"]));
   const sunkBufferMap = new Map<string, true>();
@@ -112,64 +118,81 @@ export function BoardGrid({
     col: index % board.size
   }));
 
+  const showGrid = !collapsible || expanded;
+
   return (
     <section className={compact ? "board-panel compact-board" : "board-panel"}>
-      <div className="board-heading">
-        <span>{label}</span>
-        <small>{board.size}x{board.size}</small>
-      </div>
-      <div
-        className="board-grid"
-        style={{ "--board-size": board.size } as React.CSSProperties}
-        onPointerLeave={() => onCellHover?.(null)}
-      >
-        {attackAnimation && (
-          <div
-            className={`attack-animation attack-${attackAnimation.direction} attack-${attackAnimation.result}`}
-            style={
-              {
-                "--target-row": attackAnimation.coord.row,
-                "--target-col": attackAnimation.coord.col,
-                "--board-size": board.size
-              } as React.CSSProperties
-            }
-            key={attackAnimation.id}
-          >
-            <span className="plane" />
-            <span className="bomb" />
-            <span className="impact" />
-          </div>
-        )}
-        {cells.map((coord) => {
-          const value = getVisibleCell(board, coord, revealShips);
-          const ship = revealShips || value === "hit" || value === "sunk" ? findShipAt(board, coord) : undefined;
-          const key = coordKey(coord);
-          const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
-          const sunkBuffer = sunkBufferMap.has(key);
-          const sunkShip = sunkShipMap.has(key);
-          const blocked = interactive && sunkBuffer && !sunkShip;
-          const selected = selectedCoord && coordKey(selectedCoord) === key;
-
-          return (
-            <button
-              className={`${cellClass(value, previewState)}${sunkBuffer ? " cell-sunk-buffer" : ""}${sunkShip ? " cell-sunk-ship" : ""}${blocked ? " cell-blocked-target" : ""}${selected ? " cell-selected-target" : ""}`}
-              key={key}
-              type="button"
-              disabled={!interactive || blocked}
-              aria-label={`Row ${coord.row + 1}, column ${coord.col + 1}`}
-              onPointerEnter={() => onCellHover?.(coord)}
-              onPointerDown={() => onCellPress?.(coord)}
+      {collapsible ? (
+        <button
+          className="board-heading collapsible-header"
+          type="button"
+          onClick={onToggleExpand}
+          aria-expanded={expanded}
+        >
+          <span>{label}</span>
+          <small>{board.size}x{board.size}</small>
+          <ChevronDown className={`collapse-chevron${expanded ? " expanded" : ""}`} size={16} />
+        </button>
+      ) : (
+        <div className="board-heading">
+          <span>{label}</span>
+          <small>{board.size}x{board.size}</small>
+        </div>
+      )}
+      {showGrid && (
+        <div
+          className="board-grid"
+          style={{ "--board-size": board.size } as React.CSSProperties}
+          onPointerLeave={() => onCellHover?.(null)}
+        >
+          {attackAnimation && (
+            <div
+              className={`attack-animation attack-${attackAnimation.direction} attack-${attackAnimation.result}`}
+              style={
+                {
+                  "--target-row": attackAnimation.coord.row,
+                  "--target-col": attackAnimation.coord.col,
+                  "--board-size": board.size
+                } as React.CSSProperties
+              }
+              key={attackAnimation.id}
             >
-              {value === "miss" && <Waves size={13} />}
-              {ship && (value === "ship" || sunkShip) && (
-                <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
-              )}
-              {(value === "hit" || value === "sunk") && <span className="blast" />}
-              {value === "hit" && <span className="smoke" />}
-            </button>
-          );
-        })}
-      </div>
+              <span className="plane" />
+              <span className="bomb" />
+              <span className="impact" />
+            </div>
+          )}
+          {cells.map((coord) => {
+            const value = getVisibleCell(board, coord, revealShips);
+            const ship = revealShips || value === "hit" || value === "sunk" ? findShipAt(board, coord) : undefined;
+            const key = coordKey(coord);
+            const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
+            const sunkBuffer = sunkBufferMap.has(key);
+            const sunkShip = sunkShipMap.has(key);
+            const blocked = interactive && sunkBuffer && !sunkShip;
+            const selected = selectedCoord && coordKey(selectedCoord) === key;
+
+            return (
+              <button
+                className={`${cellClass(value, previewState)}${sunkBuffer ? " cell-sunk-buffer" : ""}${sunkShip ? " cell-sunk-ship" : ""}${blocked ? " cell-blocked-target" : ""}${selected ? " cell-selected-target" : ""}`}
+                key={key}
+                type="button"
+                disabled={!interactive || blocked}
+                aria-label={`Row ${coord.row + 1}, column ${coord.col + 1}`}
+                onPointerEnter={() => onCellHover?.(coord)}
+                onPointerDown={() => onCellPress?.(coord)}
+              >
+                {value === "miss" && <Waves size={13} />}
+                {ship && (value === "ship" || sunkShip) && (
+                  <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
+                )}
+                {(value === "hit" || value === "sunk") && <span className="blast" />}
+                {value === "hit" && <span className="smoke" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

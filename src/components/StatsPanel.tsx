@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { PlayerStats } from "../services/storage";
 
 function percent(part: number, total: number): string {
@@ -12,7 +13,7 @@ function duration(ms: number | null): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-export function StatsPanel({ stats }: { stats: PlayerStats }) {
+export function StatsPanel({ stats, onRemoveMatch }: { stats: PlayerStats; onRemoveMatch?: (matchId: string) => void }) {
   const statCards = [
     ["Games", stats.totalGames],
     ["Wins", stats.wins],
@@ -42,8 +43,21 @@ export function StatsPanel({ stats }: { stats: PlayerStats }) {
       <div className="history">
         {stats.history.slice(0, 5).map((match) => (
           <div className="history-row" key={match.id}>
-            <span>{match.result.toUpperCase()} vs {match.opponent.displayName}</span>
-            <small>{match.boardSize}x{match.boardSize} · {match.moves} moves</small>
+            <div>
+              <span>{match.result.toUpperCase()} vs {match.opponent.displayName}</span>
+              <small>{match.boardSize}x{match.boardSize} · {match.moves} moves</small>
+            </div>
+            {onRemoveMatch && (
+              <button
+                className="icon-button history-remove-button"
+                type="button"
+                title="Remove this match (e.g. a duplicated win)"
+                aria-label="Remove this match from history"
+                onClick={() => onRemoveMatch(match.id)}
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         ))}
       </div>

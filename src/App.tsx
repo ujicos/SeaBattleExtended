@@ -1,4 +1,4 @@
-import { Anchor, BarChart3, Radio, Settings, Shield, Trophy, UserRound } from "lucide-react";
+import { Anchor, BarChart3, ChevronDown, Radio, Settings, Shield, Trophy, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BoardGrid, isSunkBufferCoord } from "./components/BoardGrid";
 import type { AttackAnimation } from "./components/BoardGrid";
@@ -17,6 +17,7 @@ import {
   loadStats,
   makeIdentity,
   recordMatch,
+  removeMatch,
   saveProfile,
   saveStats,
   type PlayerProfile,
@@ -93,6 +94,8 @@ function App() {
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
+  const [fleetPanelExpanded, setFleetPanelExpanded] = useState(false);
+  const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -101,6 +104,7 @@ function App() {
   const boardSwitchTimer = useRef<number | null>(null);
   const boardReturnTimer = useRef<number | null>(null);
   const copyNoticeTimer = useRef<number | null>(null);
+  const matchRecordedRef = useRef(false);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
   const selectedShip = config.fleet.find((ship) => ship.id === game.selectedShipId);
@@ -113,12 +117,9 @@ function App() {
   const enemyShipsLeft = Math.max(0, game.remoteBoard.ships.length - enemyShipsSunk);
   const localShipsLeft = Math.max(0, game.localBoard.ships.length - localShipsSunk);
   const shareLink = useMemo(() => makeShareLink(roomCode), [roomCode]);
-  const battleLead =
-    enemyShipsSunk === localShipsSunk
-      ? "Even"
-      : enemyShipsSunk > localShipsSunk
-        ? "You lead"
-        : `${opponent.displayName} leads`;
+  const leadingSide: "local" | "remote" | null =
+    enemyShipsSunk === localShipsSunk ? null : enemyShipsSunk > localShipsSunk ? "local" : "remote";
+  const battleLeadLabel = leadingSide === "local" ? profile.displayName : leadingSide === "remote" ? opponent.displayName : "Even";
   const preview =
     hovered && selectedShip && game.phase === "placing"
       ? {
@@ -331,6 +332,9 @@ function App() {
       localBoard: randomizeFleet(nextConfig),
       selectedShipId: null
     }));
+    if (matchMode === "p2p" && peerRole === "host") {
+      network.current?.send("settings", settings);
+    }
   }
 
   function placeSelectedShip(coord: Coordinate) {
@@ -376,6 +380,7 @@ function App() {
 
   function beginLocalBattle() {
     const remoteBoard = randomizeFleet(config);
+    matchRecordedRef.current = false;
     setMatchMode("practice");
     setOpponent(guestIdentity);
     setGame((current) => startBattle(current, remoteBoard));
@@ -458,6 +463,10 @@ function App() {
   }
 
   function endMatch(result: "win" | "loss", state = game) {
+    if (matchRecordedRef.current) {
+      return;
+    }
+    matchRecordedRef.current = true;
     audio.play(result === "win" ? "victory" : "defeat");
     const durationMs = Math.round((state.endedAt ?? performance.now()) - (state.startedAt ?? performance.now()));
     setStats((current) =>
@@ -561,6 +570,7 @@ function App() {
       }
 
       if (message.type === "start") {
+        matchRecordedRef.current = false;
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
         setNetworkStatus("Battle started. Host fires first.");
         setActiveTab("play");
@@ -593,6 +603,7 @@ function App() {
     if (peerRole !== "host" || !localReady || !remoteReady || !remoteBoardReady) {
       return;
     }
+    matchRecordedRef.current = false;
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
     setNetworkStatus("Battle started. Your turn.");
@@ -632,6 +643,16 @@ function App() {
       endMatch("loss", nextState);
     } else if (nextTurn === "local") {
       notifyLocalTurn();
+    }
+  }
+
+  function rematch() {
+    setLocalReady(false);
+    setRemoteReady(false);
+    setRemoteBoardReady(null);
+    setGame((current) => resetBoards(current, current.settings));
+    if (matchMode === "p2p" && peerRole === "host") {
+      network.current?.send("settings", gameRef.current.settings);
     }
   }
 
@@ -736,11 +757,17 @@ function App() {
           {game.phase === "placing" && (
             <>
               <section className="panel ship-list">
-                <div className="section-title">
+                <button
+                  className="section-title collapsible-header"
+                  type="button"
+                  onClick={() => setFleetPanelExpanded((value) => !value)}
+                  aria-expanded={fleetPanelExpanded}
+                >
                   <span>Fleet</span>
                   <small>{game.localBoard.ships.length}/{config.fleet.length}</small>
-                </div>
-                {config.fleet.map((ship) => (
+                  <ChevronDown className={`collapse-chevron${fleetPanelExpanded ? " expanded" : ""}`} size={16} />
+                </button>
+                {fleetPanelExpanded && config.fleet.map((ship) => (
                   <button
                     className={game.selectedShipId === ship.id ? "ship-row active" : "ship-row"}
                     type="button"
@@ -762,6 +789,9 @@ function App() {
                 onCellPress={placeSelectedShip}
                 onCellHover={setHovered}
                 label="Your waters"
+                collapsible
+                expanded={placementBoardExpanded}
+                onToggleExpand={() => setPlacementBoardExpanded((value) => !value)}
               />
               {matchMode === "p2p" && (
                 <section className="panel p2p-ready-panel">
@@ -847,20 +877,6 @@ function App() {
                 </section>
               )}
               <section className="battle-command-panel">
-                <div className="battle-score-panel">
-                  <div>
-                    <small>Lead</small>
-                    <strong>{battleLead}</strong>
-                  </div>
-                  <div>
-                    <small>Enemy ships left</small>
-                    <strong>{enemyShipsLeft}/{game.remoteBoard.ships.length}</strong>
-                  </div>
-                  <div>
-                    <small>Your ships left</small>
-                    <strong>{localShipsLeft}/{game.localBoard.ships.length}</strong>
-                  </div>
-                </div>
                 <div className="battle-board-tabs">
                   <button className={battleBoardView === "target" ? "active" : ""} type="button" onClick={() => setBattleBoardView("target")}>
                     Target
@@ -879,34 +895,54 @@ function App() {
                   </button>
                 </div>
               </section>
-              <div className={`battle-board-stage showing-${battleBoardView}${game.phase === "battle" && game.turn === "local" ? " your-turn" : ""}`}>
-                <div className="battle-board-slide battle-board-target" aria-hidden={battleBoardView !== "target"}>
-                  <BoardGrid
-                    board={game.remoteBoard}
-                    revealShips={game.phase !== "battle"}
-                    interactive={game.phase === "battle" && game.turn === "local" && battleBoardView === "target"}
-                    selectedCoord={selectedTarget}
-                    onCellPress={selectTarget}
-                    attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
-                    label="Target board"
-                  />
+              <div className="board-stage-wrap">
+                <div className={`battle-board-stage showing-${battleBoardView}${game.phase === "battle" && game.turn === "local" ? " your-turn" : ""}`}>
+                  <div className="battle-board-slide battle-board-target" aria-hidden={battleBoardView !== "target"}>
+                    <BoardGrid
+                      board={game.remoteBoard}
+                      revealShips={game.phase !== "battle"}
+                      interactive={game.phase === "battle" && game.turn === "local" && battleBoardView === "target"}
+                      selectedCoord={selectedTarget}
+                      onCellPress={selectTarget}
+                      attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
+                      label="Target board"
+                    />
+                  </div>
+                  <div className="battle-board-slide battle-board-fleet" aria-hidden={battleBoardView !== "fleet"}>
+                    <BoardGrid
+                      board={game.localBoard}
+                      revealShips
+                      attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
+                      label="Your board"
+                    />
+                  </div>
                 </div>
-                <div className="battle-board-slide battle-board-fleet" aria-hidden={battleBoardView !== "fleet"}>
-                  <BoardGrid
-                    board={game.localBoard}
-                    revealShips
-                    attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
-                    label="Your board"
-                  />
+                {(game.phase === "victory" || game.phase === "defeat") && (
+                  <section className={game.phase === "victory" ? "result victory" : "result defeat"}>
+                    <h2>{game.phase === "victory" ? "Victory" : "Defeat"}</h2>
+                    {matchMode !== "p2p" || peerRole === "host" ? (
+                      <button className="primary" type="button" onClick={rematch}>Rematch</button>
+                    ) : (
+                      <p>Waiting for host to start a rematch…</p>
+                    )}
+                  </section>
+                )}
+              </div>
+              <div className="battle-score-panel">
+                <div className={leadingSide === "local" ? "lead-you" : leadingSide === "remote" ? "lead-opponent" : ""}>
+                  <small>Lead</small>
+                  <strong>{battleLeadLabel}</strong>
+                </div>
+                <div>
+                  <small>Enemy ships left</small>
+                  <strong>{enemyShipsLeft}/{game.remoteBoard.ships.length}</strong>
+                </div>
+                <div>
+                  <small>Your ships left</small>
+                  <strong>{localShipsLeft}/{game.localBoard.ships.length}</strong>
                 </div>
               </div>
             </>
-          )}
-          {(game.phase === "victory" || game.phase === "defeat") && (
-            <section className={game.phase === "victory" ? "result victory" : "result defeat"}>
-              <h2>{game.phase === "victory" ? "Victory" : "Defeat"}</h2>
-              <button className="primary" type="button" onClick={() => setGame((current) => resetBoards(current, current.settings))}>Rematch</button>
-            </section>
           )}
         </div>
       )}
@@ -961,7 +997,9 @@ function App() {
           }}
         />
       )}
-      {activeTab === "stats" && <StatsPanel stats={stats} />}
+      {activeTab === "stats" && (
+        <StatsPanel stats={stats} onRemoveMatch={(matchId) => setStats((current) => removeMatch(current, matchId))} />
+      )}
       {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}
     </main>
   );
