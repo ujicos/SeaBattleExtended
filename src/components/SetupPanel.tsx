@@ -79,7 +79,7 @@ export function SetupPanel({ settings, orientation, onSettings, onRotate, onShuf
           <Shuffle size={18} /> Shuffle
         </button>
       </div>
-      <button className="primary" type="button" disabled={!ready} onClick={onStart}>Start local battle</button>
+      <button className="primary" type="button" disabled={!ready} onClick={onStart}>Start practice battle</button>
     </section>
   );
 }

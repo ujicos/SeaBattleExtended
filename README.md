@@ -1,6 +1,6 @@
 # Sea Battle Extended
 
-A mobile-first React/TypeScript web implementation of a GamePigeon-style Sea Battle MVP.
+A mobile-first React/TypeScript web implementation of a classic Sea Battle MVP.
 
 ## Run
 
@@ -131,7 +131,7 @@ VITE_SIGNALING_URL=wss://your-signaling-host.example npm run build
 
 - Configurable board presets: 8x8, 9x9, 10x10, 12x12, 14x14, 16x16, and generated 32x32 fleet.
 - Rule engine with horizontal/vertical ships, no overlap, and a one-cell buffer including diagonals.
-- GamePigeon-style combat: miss ends turn, hit/sunk keeps turn, all ships sunk wins.
+- Classic combat: miss ends turn, hit/sunk keeps turn, all ships sunk wins.
 - Touch/mouse ship placement, rotate, hover preview, and repeatable shuffle.
 - Local practice battle against a generated opponent fleet.
 - Blitz mode options with 5/10/15/30 second timers and configurable timeout behavior.

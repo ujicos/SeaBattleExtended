@@ -5,7 +5,7 @@ import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { StatsPanel } from "./components/StatsPanel";
-import { allShipsSunk, canPlaceShip, getShipCells, placeShip, randomizeFleet, receiveShot } from "./game/board";
+import { allShipsSunk, canPlaceShip, findShipAt, getShipCells, placeShip, randomizeFleet, receiveShot } from "./game/board";
 import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { rafLoop } from "./game/animation";
@@ -178,13 +178,41 @@ function App() {
   }, [clock, game.phase, game.settings.blitz.enabled, game.settings.blitz.timeoutAction, game.turn]);
 
   function updateSettings(settings: GameSettings) {
-    setGame((current) => resetBoards(current, settings));
+    const nextConfig = getBoardConfig(settings.boardId);
+    setLocalReady(false);
+    setRemoteReady(false);
+    setRemoteBoardReady(null);
+    setGame((current) => ({
+      ...resetBoards(current, settings),
+      localBoard: randomizeFleet(nextConfig),
+      selectedShipId: null
+    }));
   }
 
   function placeSelectedShip(coord: Coordinate) {
-    if (!selectedShip || game.phase !== "placing") {
+    if (game.phase !== "placing" || localReady) {
       return;
     }
+
+    const placedShip = findShipAt(game.localBoard, coord);
+    if (placedShip) {
+      const nextOrientation = placedShip.orientation === "horizontal" ? "vertical" : "horizontal";
+      if (canPlaceShip(game.localBoard, placedShip, placedShip.origin, nextOrientation, placedShip.id)) {
+        setGame((current) => ({
+          ...current,
+          localBoard: placeShip(current.localBoard, placedShip, placedShip.origin, nextOrientation),
+          selectedShipId: placedShip.id
+        }));
+      } else {
+        setGame((current) => ({ ...current, selectedShipId: placedShip.id }));
+      }
+      return;
+    }
+
+    if (!selectedShip) {
+      return;
+    }
+
     setGame((current) => {
       const board = placeShip(current.localBoard, selectedShip, coord, orientation);
       const nextSelected = nextUnplacedShipId(current.settings, new Set(board.ships.map((ship) => ship.id)));
@@ -198,6 +226,7 @@ function App() {
 
   function shuffle() {
     const board = randomizeFleet(config);
+    setLocalReady(false);
     setGame((current) => ({ ...current, localBoard: board, selectedShipId: nextUnplacedShipId(current.settings, new Set(board.ships.map((ship) => ship.id))) }));
   }
 
@@ -332,12 +361,17 @@ function App() {
 
       if (message.type === "settings") {
         const settings = message.payload as GameSettings;
-        setGame((current) => resetBoards(current, settings));
+        const nextConfig = getBoardConfig(settings.boardId);
+        setGame((current) => ({
+          ...resetBoards(current, settings),
+          localBoard: randomizeFleet(nextConfig),
+          selectedShipId: null
+        }));
         setLocalReady(false);
         setRemoteReady(false);
         setRemoteBoardReady(null);
         setActiveTab("play");
-        setNetworkStatus("Host settings received. Place your ships.");
+        setNetworkStatus("Host settings received. Click ships to rotate, then Ready.");
         return;
       }
 
@@ -513,8 +547,8 @@ function App() {
           {game.phase === "menu" && (
             <section className="panel hero-panel">
               <h1>Ready your fleet.</h1>
-              <p>Choose a board, shuffle or place each ship, then launch a practice battle. P2P rooms are available in Lobby.</p>
-              <button className="primary" type="button" onClick={() => updateSettings(game.settings)}>Place ships</button>
+              <p>Choose a board, tweak the randomized fleet if you want, then start a practice battle or create a P2P room.</p>
+              <button className="primary" type="button" onClick={() => updateSettings(game.settings)}>Ready fleet</button>
             </section>
           )}
           {game.phase === "placing" && (
@@ -539,7 +573,7 @@ function App() {
               <BoardGrid
                 board={game.localBoard}
                 revealShips
-                interactive
+                interactive={!localReady}
                 preview={preview}
                 selectedShip={selectedShip}
                 orientation={orientation}
@@ -564,7 +598,7 @@ function App() {
                     </div>
                   </div>
                   <button className="primary" type="button" disabled={!placementReady || localReady} onClick={markReady}>
-                    Confirm fleet
+                    Ready
                   </button>
                   {peerRole === "host" && (
                     <button className="secondary" type="button" disabled={!localReady || !remoteReady} onClick={startP2PBattle}>
