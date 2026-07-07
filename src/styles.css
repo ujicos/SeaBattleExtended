@@ -133,7 +133,7 @@ small,
 }
 
 .player-chip:hover,
-.menu-button:hover {
+.tabbar button:hover {
   border-color: rgba(72, 208, 187, 0.55);
   background: rgba(72, 208, 187, 0.1);
 }
@@ -144,49 +144,20 @@ small,
   justify-content: flex-end;
 }
 
-.menu-button {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  color: #eef8f7;
-  background: rgba(255, 255, 255, 0.06);
-  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
-}
-
-.menu-button:active,
 .player-chip:active {
   transform: scale(0.97);
 }
 
 .tabbar {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 10;
+  position: sticky;
+  top: 8px;
+  z-index: 8;
   display: grid;
-  grid-template-columns: 1fr;
-  width: min(260px, calc(100vw - 28px));
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
-  margin: 0;
+  margin: 14px 0;
   padding: 6px;
   border-radius: 16px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-8px) scale(0.96);
-  transform-origin: top right;
-  transition: opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.2, 1);
-}
-
-.menu-popover {
-}
-
-.menu-popover.open {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0) scale(1);
 }
 
 .tabbar button,
@@ -202,12 +173,11 @@ small,
 }
 
 .tabbar button {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
+  display: grid;
+  place-items: center;
+  gap: 3px;
   border-radius: 12px;
-  padding: 0 14px;
+  padding: 0;
   background: transparent;
   color: #b9cecc;
   transition: background 160ms ease, color 160ms ease, transform 160ms ease;
@@ -219,7 +189,11 @@ small,
 }
 
 .tabbar button:active {
-  transform: translateX(2px) scale(0.98);
+  transform: scale(0.98);
+}
+
+.tabbar span {
+  font-size: 0.76rem;
 }
 
 .tabbar button.active,

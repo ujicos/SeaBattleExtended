@@ -1,4 +1,4 @@
-import { Anchor, BarChart3, Menu, Radio, Settings, Shield, Trophy, UserRound, X } from "lucide-react";
+import { Anchor, BarChart3, Radio, Settings, Shield, Trophy, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BoardGrid } from "./components/BoardGrid";
 import type { AttackAnimation } from "./components/BoardGrid";
@@ -66,7 +66,6 @@ function App() {
   const [networkStatus, setNetworkStatus] = useState("Offline practice");
   const [opponent, setOpponent] = useState<PeerIdentity>(guestIdentity);
   const [clock, setClock] = useState<number>(defaultSettings.blitz.seconds);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [showOpponentStats, setShowOpponentStats] = useState(false);
   const [attackVisual, setAttackVisual] = useState<(AttackAnimation & { board: "local" | "remote" }) | null>(null);
   const [matchMode, setMatchMode] = useState<MatchMode>("practice");
@@ -483,7 +482,6 @@ function App() {
           title="Go to main page"
           onClick={() => {
             setActiveTab("play");
-            setMenuOpen(false);
           }}
         >
           <Anchor />
@@ -499,39 +497,32 @@ function App() {
             title="Open profile"
             onClick={() => {
               setActiveTab("profile");
-              setMenuOpen(false);
             }}
           >
             <UserRound size={18} />
             {profile.displayName}
           </button>
-          <button className="menu-button" type="button" title="Open menu" onClick={() => setMenuOpen((value) => !value)}>
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
         </div>
-        <nav className={menuOpen ? "tabbar menu-popover open" : "tabbar menu-popover"} aria-hidden={!menuOpen}>
-          {[
-            ["play", Shield, "Play"],
-            ["lobby", Radio, "Lobby"],
-            ["profile", Settings, "Profile"],
-            ["stats", Trophy, "Stats"]
-          ].map(([key, Icon, label]) => (
-            <button
-              className={activeTab === key ? "active" : ""}
-              type="button"
-              key={key as string}
-              tabIndex={menuOpen ? 0 : -1}
-              onClick={() => {
-                setActiveTab(key as typeof activeTab);
-                setMenuOpen(false);
-              }}
-            >
-              <Icon size={19} />
-              <span>{label as string}</span>
-            </button>
-          ))}
-        </nav>
       </header>
+
+      <nav className="tabbar">
+        {[
+          ["play", Shield, "Play"],
+          ["lobby", Radio, "Lobby"],
+          ["profile", Settings, "Profile"],
+          ["stats", Trophy, "Stats"]
+        ].map(([key, Icon, label]) => (
+          <button
+            className={activeTab === key ? "active" : ""}
+            type="button"
+            key={key as string}
+            onClick={() => setActiveTab(key as typeof activeTab)}
+          >
+            <Icon size={19} />
+            <span>{label as string}</span>
+          </button>
+        ))}
+      </nav>
 
       {activeTab === "play" && (
         <div className={game.phase === "battle" || game.phase === "victory" || game.phase === "defeat" ? "content-grid battle-grid" : "content-grid setup-focus"}>
