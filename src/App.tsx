@@ -36,6 +36,16 @@ function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): str
   return getBoardConfig(settings.boardId).fleet.find((ship) => !placedIds.has(ship.id))?.id ?? null;
 }
 
+function makeShareLink(roomCode: string): string {
+  if (!roomCode) {
+    return "";
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", roomCode);
+  url.hash = "";
+  return url.toString();
+}
+
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
@@ -99,6 +109,7 @@ function App() {
   const localShipsSunk = useMemo(() => game.localBoard.ships.filter(isShipSunk).length, [game.localBoard.ships]);
   const enemyShipsLeft = Math.max(0, game.remoteBoard.ships.length - enemyShipsSunk);
   const localShipsLeft = Math.max(0, game.localBoard.ships.length - localShipsSunk);
+  const shareLink = useMemo(() => makeShareLink(roomCode), [roomCode]);
   const battleLead =
     enemyShipsSunk === localShipsSunk
       ? "Even"
@@ -206,6 +217,18 @@ function App() {
 
   useEffect(() => {
     void loadAppVersion().then(setAppVersion);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedRoom = (params.get("room") ?? params.get("join") ?? "").trim().toUpperCase();
+    if (!sharedRoom) {
+      return;
+    }
+    setJoinCode(sharedRoom);
+    setRoomCode(sharedRoom);
+    setActiveTab("lobby");
+    setNetworkStatus("Shared lobby link ready. Tap Join Game to connect.");
   }, []);
 
   useEffect(() => {
@@ -722,6 +745,17 @@ function App() {
                       )}
                     </div>
                   )}
+                  {peerRole === "host" && shareLink && (
+                    <div className="share-link-card">
+                      <div>
+                        <small>Join link</small>
+                        <strong>{shareLink}</strong>
+                      </div>
+                      <button className="secondary compact-action" type="button" onClick={() => void navigator.clipboard?.writeText(shareLink)}>
+                        Copy
+                      </button>
+                    </div>
+                  )}
                   <div className="ready-grid">
                     <div className={localReady ? "ready-pill ready" : "ready-pill"}>
                       <small>Your fleet</small>
@@ -849,6 +883,17 @@ function App() {
             </div>
             <button className="primary" type="button" onClick={() => void createRoom()}>Create Game</button>
             {roomCode && <div className="room-code">{roomCode}</div>}
+            {shareLink && (
+              <div className="share-link-card">
+                <div>
+                  <small>Share link</small>
+                  <strong>{shareLink}</strong>
+                </div>
+                <button className="secondary compact-action" type="button" onClick={() => void navigator.clipboard?.writeText(shareLink)}>
+                  Copy
+                </button>
+              </div>
+            )}
             <label className="field">
               Join code
               <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="ABC123" />
