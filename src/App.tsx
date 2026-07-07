@@ -40,6 +40,7 @@ type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
 const BOARD_SWITCH_DELAY_MS = 250;
 const BOARD_RETURN_DELAY_MS = 1200;
+const OPPONENT_SOUND_VOLUME = 0.45;
 
 interface ReadyPayload {
   board: BoardState;
@@ -134,8 +135,8 @@ function App() {
     return "bottom-top";
   }
 
-  function playAttackVisual(board: "local" | "remote", coord: Coordinate, result: AttackAnimation["result"]) {
-    audio.play("flyby");
+  function playAttackVisual(board: "local" | "remote", coord: Coordinate, result: AttackAnimation["result"], volume = 1) {
+    audio.play("flyby", volume);
     setAttackVisual({
       id: crypto.randomUUID(),
       board,
@@ -144,6 +145,10 @@ function App() {
       result
     });
     window.setTimeout(() => setAttackVisual((current) => (current?.coord === coord && current.board === board ? null : current)), 920);
+  }
+
+  function notifyLocalTurn(): void {
+    audio.play("turn", 0.8);
   }
 
   function showBattleBoard(view: BattleBoardView, holdMs = 0, delayMs = 0) {
@@ -217,10 +222,17 @@ function App() {
       return;
     }
     if (game.settings.blitz.timeoutAction === "lose-match") {
-      endMatch(game.turn === "local" ? "loss" : "win");
+      const result = game.turn === "local" ? "loss" : "win";
+      endMatch(result);
       setGame((current) => ({ ...current, phase: game.turn === "local" ? "defeat" : "victory", winner: game.turn === "local" ? "remote" : "local" }));
     } else {
-      setGame((current) => ({ ...current, turn: current.turn === "local" ? "remote" : "local" }));
+      setGame((current) => {
+        const nextTurn = current.turn === "local" ? "remote" : "local";
+        if (nextTurn === "local") {
+          notifyLocalTurn();
+        }
+        return { ...current, turn: nextTurn };
+      });
     }
   }, [clock, game.phase, game.settings.blitz.enabled, game.settings.blitz.timeoutAction, game.turn]);
 
@@ -340,7 +352,8 @@ function App() {
     }
     const { state, outcome } = attack(currentGame, "local", pick);
     if (outcome.result !== "invalid" && outcome.result !== "duplicate") {
-      playAttackVisual("local", pick, outcome.result);
+      playAttackVisual("local", pick, outcome.result, OPPONENT_SOUND_VOLUME);
+      audio.play(outcome.result === "miss" ? "miss" : "hit", OPPONENT_SOUND_VOLUME);
       showBattleBoard("fleet", outcome.nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
     }
     setGame(state);
@@ -350,6 +363,8 @@ function App() {
     }
     if (outcome.nextTurn === "remote") {
       window.setTimeout(() => remoteTurn(state), 520);
+    } else {
+      notifyLocalTurn();
     }
   }
 
@@ -501,7 +516,8 @@ function App() {
     if (shot.result === "duplicate") {
       return;
     }
-    playAttackVisual("local", coord, shot.result);
+    playAttackVisual("local", coord, shot.result, OPPONENT_SOUND_VOLUME);
+    audio.play(shot.result === "miss" ? "miss" : "hit", OPPONENT_SOUND_VOLUME);
     const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
     const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
     showBattleBoard("fleet", nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
@@ -525,6 +541,8 @@ function App() {
     } satisfies ShotResultPayload);
     if (winner) {
       endMatch("loss", nextState);
+    } else if (nextTurn === "local") {
+      notifyLocalTurn();
     }
   }
 
@@ -544,6 +562,8 @@ function App() {
       };
       if (nextWinner === "local") {
         endMatch("win", nextState);
+      } else if (nextTurn === "local") {
+        notifyLocalTurn();
       }
       showBattleBoard("fleet", nextTurn === "local" && !nextWinner ? BOARD_RETURN_DELAY_MS : 0);
       return nextState;
