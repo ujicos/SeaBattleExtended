@@ -63,6 +63,7 @@ button {
 }
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -84,10 +85,26 @@ button {
 
 .brand {
   gap: 12px;
+  min-width: 0;
+}
+
+.brand-button {
+  border: 0;
+  padding: 0;
+  color: #eef8f7;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.brand-button:hover svg {
+  transform: rotate(-8deg) scale(1.06);
 }
 
 .brand svg {
+  flex: 0 0 auto;
   color: var(--accent);
+  transition: transform 180ms ease;
 }
 
 .brand strong,
@@ -121,7 +138,9 @@ small,
 }
 
 .top-actions {
+  flex: 0 0 auto;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .menu-button {
@@ -142,10 +161,10 @@ small,
 }
 
 .tabbar {
-  position: fixed;
-  top: max(76px, calc(env(safe-area-inset-top) + 70px));
-  right: 14px;
-  z-index: 3;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
   display: grid;
   grid-template-columns: 1fr;
   width: min(260px, calc(100vw - 28px));
@@ -153,11 +172,20 @@ small,
   margin: 0;
   padding: 6px;
   border-radius: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.96);
+  transform-origin: top right;
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 
 .menu-popover {
-  transform-origin: top right;
-  animation: menu-pop 180ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.menu-popover.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
 }
 
 .tabbar button,
@@ -676,16 +704,31 @@ select {
   }
 
   .topbar {
-    align-items: flex-start;
+    align-items: center;
+    gap: 10px;
   }
 
   .top-actions {
-    align-items: flex-end;
+    align-items: center;
   }
 
   .brand small,
   .player-chip {
     font-size: 0.78rem;
+  }
+
+  .brand strong {
+    font-size: 0.92rem;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .player-chip {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .content-grid,
@@ -724,17 +767,6 @@ select {
   100% {
     opacity: 0;
     transform: translateY(-10px) scale(1.25);
-  }
-}
-
-@keyframes menu-pop {
-  0% {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 

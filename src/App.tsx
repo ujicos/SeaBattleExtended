@@ -443,13 +443,21 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
+        <button
+          className="brand brand-button"
+          type="button"
+          title="Go to main page"
+          onClick={() => {
+            setActiveTab("play");
+            setMenuOpen(false);
+          }}
+        >
           <Anchor />
           <div>
             <strong>Sea Battle Extended</strong>
             <small>120Hz-ready WebRTC battles</small>
           </div>
-        </div>
+        </button>
         <div className="top-actions">
           <button
             className="player-chip"
@@ -469,29 +477,28 @@ function App() {
         </div>
       </header>
 
-      {menuOpen && (
-        <nav className="tabbar menu-popover">
-          {[
-            ["play", Shield, "Play"],
-            ["lobby", Radio, "Lobby"],
-            ["profile", Settings, "Profile"],
-            ["stats", Trophy, "Stats"]
-          ].map(([key, Icon, label]) => (
-            <button
-              className={activeTab === key ? "active" : ""}
-              type="button"
-              key={key as string}
-              onClick={() => {
-                setActiveTab(key as typeof activeTab);
-                setMenuOpen(false);
-              }}
-            >
-              <Icon size={19} />
-              <span>{label as string}</span>
-            </button>
-          ))}
-        </nav>
-      )}
+      <nav className={menuOpen ? "tabbar menu-popover open" : "tabbar menu-popover"} aria-hidden={!menuOpen}>
+        {[
+          ["play", Shield, "Play"],
+          ["lobby", Radio, "Lobby"],
+          ["profile", Settings, "Profile"],
+          ["stats", Trophy, "Stats"]
+        ].map(([key, Icon, label]) => (
+          <button
+            className={activeTab === key ? "active" : ""}
+            type="button"
+            key={key as string}
+            tabIndex={menuOpen ? 0 : -1}
+            onClick={() => {
+              setActiveTab(key as typeof activeTab);
+              setMenuOpen(false);
+            }}
+          >
+            <Icon size={19} />
+            <span>{label as string}</span>
+          </button>
+        ))}
+      </nav>
 
       {activeTab === "play" && (
         <div className={game.phase === "battle" || game.phase === "victory" || game.phase === "defeat" ? "content-grid battle-grid" : "content-grid setup-focus"}>
