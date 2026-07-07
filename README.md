@@ -21,12 +21,32 @@ Then open the Vite URL, normally `http://localhost:5173`.
 
 The production signaling service lives in `worker/signaling.ts` and uses one Durable Object per room. This is the piece GitHub Pages cannot run by itself.
 
+Your Worker URL is:
+
+```text
+https://seabattle-extended.yohabbodude.workers.dev
+```
+
+Opening that URL in a normal browser page is only a health check. The game connects to the same endpoint as a WebSocket:
+
+```text
+wss://seabattle-extended.yohabbodude.workers.dev/?room=ABC123&role=host
+```
+
 Install and log in:
 
 ```bash
 npm install
 npx wrangler login
 ```
+
+If Wrangler cannot open a browser login from the current terminal, create a Cloudflare API token and expose it before deploying:
+
+```bash
+export CLOUDFLARE_API_TOKEN="your-token"
+```
+
+The token needs permission to edit Workers Scripts and Durable Objects on the account that owns `yohabbodude.workers.dev`.
 
 Test the Worker locally:
 
@@ -58,10 +78,31 @@ Use the WebSocket version in `.env.local`:
 VITE_SIGNALING_URL=wss://sea-battle-signaling.YOUR_SUBDOMAIN.workers.dev
 ```
 
+For this project, use:
+
+```bash
+VITE_SIGNALING_URL=wss://seabattle-extended.yohabbodude.workers.dev
+```
+
 Then build the frontend:
 
 ```bash
 npm run build
+```
+
+### GitHub Actions Worker Deploy
+
+This repo includes `.github/workflows/worker.yml`. To let GitHub deploy the Worker on commit:
+
+1. In GitHub, open repo Settings -> Secrets and variables -> Actions.
+2. Add `CLOUDFLARE_API_TOKEN`.
+3. Add `CLOUDFLARE_ACCOUNT_ID`.
+4. Push changes to `main`, or run the workflow manually.
+
+The frontend build workflow also bakes in:
+
+```text
+VITE_SIGNALING_URL=wss://seabattle-extended.yohabbodude.workers.dev
 ```
 
 ## GitHub Pages

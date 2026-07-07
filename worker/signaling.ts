@@ -26,6 +26,16 @@ function json(data: unknown, init?: ResponseInit): Response {
   });
 }
 
+function serviceInfo(request: Request): Response {
+  const url = new URL(request.url);
+  return json({
+    ok: true,
+    service: "sea-battle-signaling",
+    websocket: `${url.protocol === "https:" ? "wss" : "ws"}://${url.host}/?room=ROOMCODE&role=host`,
+    note: "This endpoint is healthy. Open it as a WebSocket from the game, not as a normal browser page."
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -42,11 +52,11 @@ export default {
     }
 
     if (url.pathname === "/health") {
-      return json({ ok: true, service: "sea-battle-signaling" });
+      return serviceInfo(request);
     }
 
     if (request.headers.get("upgrade") !== "websocket") {
-      return json({ ok: false, error: "Expected WebSocket upgrade" }, { status: 426 });
+      return serviceInfo(request);
     }
 
     if (!roomCode) {
@@ -114,7 +124,7 @@ export class SignalingRoom {
         sender.send(JSON.stringify(signal));
       }
 
-      this.broadcast(sender, { type: "peer-joined", identity: join.identity });
+      this.broadcastIdentified(sender, { type: "peer-joined", identity: join.identity });
       for (const [, peerInfo] of this.sessions) {
         if (peerInfo.identity && peerInfo.identity !== join.identity) {
           sender.send(JSON.stringify({ type: "peer-joined", identity: peerInfo.identity }));
@@ -137,6 +147,15 @@ export class SignalingRoom {
     const rendered = JSON.stringify(message);
     for (const [socket] of this.sessions) {
       if (socket !== sender && socket.readyState === WebSocket.OPEN) {
+        socket.send(rendered);
+      }
+    }
+  }
+
+  private broadcastIdentified(sender: WebSocket, message: unknown): void {
+    const rendered = JSON.stringify(message);
+    for (const [socket, info] of this.sessions) {
+      if (socket !== sender && info.identity && socket.readyState === WebSocket.OPEN) {
         socket.send(rendered);
       }
     }

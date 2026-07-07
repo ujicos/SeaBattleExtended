@@ -14,7 +14,7 @@ export class PeerGameClient {
   constructor(
     private readonly signalingUrl =
       import.meta.env.VITE_SIGNALING_URL ??
-      `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8787`
+      "wss://seabattle-extended.yohabbodude.workers.dev"
   ) {}
 
   onMessage(listener: Listener): () => void {

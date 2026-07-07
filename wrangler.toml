@@ -1,4 +1,4 @@
-name = "sea-battle-signaling"
+name = "seabattle-extended"
 main = "worker/signaling.ts"
 compatibility_date = "2026-07-07"
 
@@ -10,4 +10,3 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalingRoom"]
-name = 'seabattle-extended'
