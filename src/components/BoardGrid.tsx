@@ -24,6 +24,11 @@ interface BoardGridProps {
   label: string;
 }
 
+export function isSunkBufferCoord(board: BoardState, coord: Coordinate): boolean {
+  const key = coordKey(coord);
+  return board.ships.filter(isShipSunk).some((ship) => getShipBufferCells(ship, board.size).some((cell) => coordKey(cell) === key));
+}
+
 function cellClass(value: "empty" | "ship" | ShotResult, preview?: "valid" | "invalid"): string {
   const classes = ["cell", `cell-${value}`];
   if (preview) {
@@ -142,14 +147,15 @@ export function BoardGrid({
           const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
           const sunkBuffer = sunkBufferMap.has(key);
           const sunkShip = sunkShipMap.has(key);
+          const blocked = interactive && sunkBuffer && !sunkShip;
           const selected = selectedCoord && coordKey(selectedCoord) === key;
 
           return (
             <button
-              className={`${cellClass(value, previewState)}${sunkBuffer ? " cell-sunk-buffer" : ""}${sunkShip ? " cell-sunk-ship" : ""}${selected ? " cell-selected-target" : ""}`}
+              className={`${cellClass(value, previewState)}${sunkBuffer ? " cell-sunk-buffer" : ""}${sunkShip ? " cell-sunk-ship" : ""}${blocked ? " cell-blocked-target" : ""}${selected ? " cell-selected-target" : ""}`}
               key={key}
               type="button"
-              disabled={!interactive}
+              disabled={!interactive || blocked}
               aria-label={`Row ${coord.row + 1}, column ${coord.col + 1}`}
               onPointerEnter={() => onCellHover?.(coord)}
               onPointerDown={() => onCellPress?.(coord)}

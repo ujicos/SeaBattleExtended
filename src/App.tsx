@@ -1,11 +1,11 @@
 import { Anchor, BarChart3, Radio, Settings, Shield, Trophy, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BoardGrid } from "./components/BoardGrid";
+import { BoardGrid, isSunkBufferCoord } from "./components/BoardGrid";
 import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { StatsPanel } from "./components/StatsPanel";
-import { allShipsSunk, canPlaceShip, coordKey, findShipAt, getShipCells, placeShip, randomizeFleet, receiveShot } from "./game/board";
+import { allShipsSunk, canPlaceShip, coordKey, findShipAt, getShipCells, isShipSunk, placeShip, randomizeFleet, receiveShot } from "./game/board";
 import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { rafLoop } from "./game/animation";
@@ -93,6 +93,16 @@ function App() {
   const placementReady = game.localBoard.ships.length === config.fleet.length;
   const opponentRecord = stats.opponents[opponent.playerId];
   const matchActive = game.phase === "battle" || game.phase === "victory" || game.phase === "defeat";
+  const enemyShipsSunk = useMemo(() => game.remoteBoard.ships.filter(isShipSunk).length, [game.remoteBoard.ships]);
+  const localShipsSunk = useMemo(() => game.localBoard.ships.filter(isShipSunk).length, [game.localBoard.ships]);
+  const enemyShipsLeft = Math.max(0, game.remoteBoard.ships.length - enemyShipsSunk);
+  const localShipsLeft = Math.max(0, game.localBoard.ships.length - localShipsSunk);
+  const battleLead =
+    enemyShipsSunk === localShipsSunk
+      ? "Even"
+      : enemyShipsSunk > localShipsSunk
+        ? "You lead"
+        : `${opponent.displayName} leads`;
   const preview =
     hovered && selectedShip && game.phase === "placing"
       ? {
@@ -309,7 +319,7 @@ function App() {
     if (game.phase !== "battle" || game.turn !== "local") {
       return;
     }
-    if (game.remoteBoard.shots[coordKey(coord)]) {
+    if (game.remoteBoard.shots[coordKey(coord)] || isSunkBufferCoord(game.remoteBoard, coord)) {
       return;
     }
     setSelectedTarget(coord);
@@ -317,6 +327,10 @@ function App() {
 
   function fireSelectedTarget() {
     if (!selectedTarget) {
+      return;
+    }
+    if (game.remoteBoard.shots[coordKey(selectedTarget)] || isSunkBufferCoord(game.remoteBoard, selectedTarget)) {
+      setSelectedTarget(null);
       return;
     }
     fire(selectedTarget);
@@ -363,7 +377,7 @@ function App() {
     if (outcome.result !== "invalid" && outcome.result !== "duplicate") {
       playAttackVisual("local", pick, outcome.result, OPPONENT_SOUND_VOLUME);
       playShotResultSound(outcome.result, OPPONENT_SOUND_VOLUME);
-      showBattleBoard("fleet", outcome.nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
+      showBattleBoard(outcome.nextTurn === "local" ? "target" : "fleet", 0, outcome.nextTurn === "local" ? BOARD_SWITCH_DELAY_MS : 0);
     }
     setGame(state);
     if (outcome.winner) {
@@ -529,7 +543,7 @@ function App() {
     playShotResultSound(shot.result, OPPONENT_SOUND_VOLUME);
     const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
     const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
-    showBattleBoard("fleet", nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
+    showBattleBoard(nextTurn === "local" && !winner ? "target" : "fleet", 0, nextTurn === "local" && !winner ? BOARD_SWITCH_DELAY_MS : 0);
     const nextState: GameState = {
       ...current,
       localBoard: shot.board,
@@ -574,7 +588,7 @@ function App() {
       } else if (nextTurn === "local") {
         notifyLocalTurn();
       }
-      showBattleBoard("fleet", nextTurn === "local" && !nextWinner ? BOARD_RETURN_DELAY_MS : 0);
+      showBattleBoard(nextTurn === "local" && !nextWinner ? "target" : "fleet", nextTurn === "remote" && !nextWinner ? BOARD_RETURN_DELAY_MS : 0);
       return nextState;
     });
   }
@@ -753,6 +767,20 @@ function App() {
                 </section>
               )}
               <section className="battle-command-panel">
+                <div className="battle-score-panel">
+                  <div>
+                    <small>Lead</small>
+                    <strong>{battleLead}</strong>
+                  </div>
+                  <div>
+                    <small>Enemy ships left</small>
+                    <strong>{enemyShipsLeft}/{game.remoteBoard.ships.length}</strong>
+                  </div>
+                  <div>
+                    <small>Your ships left</small>
+                    <strong>{localShipsLeft}/{game.localBoard.ships.length}</strong>
+                  </div>
+                </div>
                 <div className="battle-board-tabs">
                   <button className={battleBoardView === "target" ? "active" : ""} type="button" onClick={() => setBattleBoardView("target")}>
                     Target
