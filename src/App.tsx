@@ -5,7 +5,7 @@ import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { StatsPanel } from "./components/StatsPanel";
-import { allShipsSunk, canPlaceShip, findShipAt, getShipCells, placeShip, randomizeFleet, receiveShot } from "./game/board";
+import { allShipsSunk, canPlaceShip, coordKey, findShipAt, getShipCells, placeShip, randomizeFleet, receiveShot } from "./game/board";
 import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { rafLoop } from "./game/animation";
@@ -37,6 +37,7 @@ function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): str
 
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
+type BattleBoardView = "target" | "fleet";
 
 interface ReadyPayload {
   board: BoardState;
@@ -73,6 +74,8 @@ function App() {
   const [localReady, setLocalReady] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [remoteBoardReady, setRemoteBoardReady] = useState<BoardState | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<Coordinate | null>(null);
+  const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -84,6 +87,7 @@ function App() {
   const placedIds = useMemo(() => new Set(game.localBoard.ships.map((ship) => ship.id)), [game.localBoard.ships]);
   const placementReady = game.localBoard.ships.length === config.fleet.length;
   const opponentRecord = stats.opponents[opponent.playerId];
+  const matchActive = game.phase === "battle" || game.phase === "victory" || game.phase === "defeat";
   const preview =
     hovered && selectedShip && game.phase === "placing"
       ? {
@@ -137,6 +141,18 @@ function App() {
     window.setTimeout(() => setAttackVisual((current) => (current?.coord === coord && current.board === board ? null : current)), 920);
   }
 
+  function showBattleBoard(view: BattleBoardView, holdMs = 0) {
+    setBattleBoardView(view);
+    if (holdMs > 0) {
+      window.setTimeout(() => {
+        const current = gameRef.current;
+        if (current.phase === "battle" && current.turn === "local") {
+          setBattleBoardView("target");
+        }
+      }, holdMs);
+    }
+  }
+
   useEffect(() => {
     assets.preload();
   }, []);
@@ -163,6 +179,17 @@ function App() {
       setClock(game.settings.blitz.seconds);
     }
   }, [game.turn, game.phase, game.settings.blitz.seconds]);
+
+  useEffect(() => {
+    if (game.phase !== "battle") {
+      setSelectedTarget(null);
+      setBattleBoardView("target");
+      return;
+    }
+    if (game.turn === "remote") {
+      setBattleBoardView("fleet");
+    }
+  }, [game.phase, game.turn]);
 
   useEffect(() => {
     if (clock > 0 || game.phase !== "battle" || !game.settings.blitz.enabled) {
@@ -236,6 +263,23 @@ function App() {
     setGame((current) => startBattle(current, remoteBoard));
   }
 
+  function selectTarget(coord: Coordinate) {
+    if (game.phase !== "battle" || game.turn !== "local") {
+      return;
+    }
+    if (game.remoteBoard.shots[coordKey(coord)]) {
+      return;
+    }
+    setSelectedTarget(coord);
+  }
+
+  function fireSelectedTarget() {
+    if (!selectedTarget) {
+      return;
+    }
+    fire(selectedTarget);
+  }
+
   function fire(coord: Coordinate) {
     if (game.turn !== "local") {
       return;
@@ -244,6 +288,8 @@ function App() {
     if (outcome.result === "invalid" || outcome.result === "duplicate") {
       return;
     }
+    setSelectedTarget(null);
+    showBattleBoard("fleet", outcome.nextTurn === "local" ? 1400 : 0);
     playAttackVisual("remote", coord, outcome.result);
     audio.play(outcome.result === "miss" ? "miss" : "hit");
     setGame(state);
@@ -270,6 +316,7 @@ function App() {
     const { state, outcome } = attack(currentGame, "local", pick);
     if (outcome.result !== "invalid" && outcome.result !== "duplicate") {
       playAttackVisual("local", pick, outcome.result);
+      showBattleBoard("fleet", outcome.nextTurn === "local" ? 1500 : 0);
     }
     setGame(state);
     if (outcome.winner) {
@@ -429,6 +476,7 @@ function App() {
     playAttackVisual("local", coord, shot.result);
     const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
     const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
+    showBattleBoard("fleet", nextTurn === "local" ? 1500 : 0);
     const nextState: GameState = {
       ...current,
       localBoard: shot.board,
@@ -469,6 +517,7 @@ function App() {
       if (nextWinner === "local") {
         endMatch("win", nextState);
       }
+      showBattleBoard("fleet", nextTurn === "local" && !nextWinner ? 1400 : 0);
       return nextState;
     });
   }
@@ -505,7 +554,7 @@ function App() {
         </div>
       </header>
 
-      <nav className="tabbar">
+      <nav className={matchActive && activeTab === "play" ? "tabbar tabbar-hidden" : "tabbar"}>
         {[
           ["play", Shield, "Play"],
           ["lobby", Radio, "Lobby"],
@@ -525,16 +574,18 @@ function App() {
       </nav>
 
       {activeTab === "play" && (
-        <div className={game.phase === "battle" || game.phase === "victory" || game.phase === "defeat" ? "content-grid battle-grid" : "content-grid setup-focus"}>
-          <SetupPanel
-            settings={game.settings}
-            orientation={orientation}
-            onSettings={updateSettings}
-            onRotate={() => setOrientation((value) => (value === "horizontal" ? "vertical" : "horizontal"))}
-            onShuffle={shuffle}
-            onStart={beginLocalBattle}
-            ready={matchMode === "practice" && placementReady}
-          />
+        <div className={matchActive ? "content-grid battle-grid" : "content-grid setup-focus"}>
+          {game.phase !== "battle" && game.phase !== "victory" && game.phase !== "defeat" && (
+            <SetupPanel
+              settings={game.settings}
+              orientation={orientation}
+              onSettings={updateSettings}
+              onRotate={() => setOrientation((value) => (value === "horizontal" ? "vertical" : "horizontal"))}
+              onShuffle={shuffle}
+              onStart={beginLocalBattle}
+              ready={matchMode === "practice" && placementReady}
+            />
+          )}
           {game.phase === "menu" && (
             <section className="panel hero-panel">
               <h1>Ready your fleet.</h1>
@@ -644,21 +695,46 @@ function App() {
                   </div>
                 </section>
               )}
-              <BoardGrid
-                board={game.remoteBoard}
-                revealShips={game.phase !== "battle"}
-                interactive={game.phase === "battle" && game.turn === "local"}
-                onCellPress={fire}
-                attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
-                label="Target board"
-              />
-              <BoardGrid
-                board={game.localBoard}
-                revealShips
-                compact
-                attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
-                label="Your board"
-              />
+              <section className="battle-command-panel">
+                <div className="battle-board-tabs">
+                  <button className={battleBoardView === "target" ? "active" : ""} type="button" onClick={() => setBattleBoardView("target")}>
+                    Target
+                  </button>
+                  <button className={battleBoardView === "fleet" ? "active" : ""} type="button" onClick={() => setBattleBoardView("fleet")}>
+                    Your board
+                  </button>
+                </div>
+                <div className="fire-controls">
+                  <div>
+                    <small>Selected target</small>
+                    <strong>{selectedTarget ? `R${selectedTarget.row + 1} C${selectedTarget.col + 1}` : "Tap a square"}</strong>
+                  </div>
+                  <button className="primary fire-button" type="button" disabled={game.phase !== "battle" || game.turn !== "local" || battleBoardView !== "target" || !selectedTarget} onClick={fireSelectedTarget}>
+                    Fire!
+                  </button>
+                </div>
+              </section>
+              <div className={`battle-board-stage showing-${battleBoardView}`}>
+                <div className="battle-board-slide battle-board-target" aria-hidden={battleBoardView !== "target"}>
+                  <BoardGrid
+                    board={game.remoteBoard}
+                    revealShips={game.phase !== "battle"}
+                    interactive={game.phase === "battle" && game.turn === "local" && battleBoardView === "target"}
+                    selectedCoord={selectedTarget}
+                    onCellPress={selectTarget}
+                    attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
+                    label="Target board"
+                  />
+                </div>
+                <div className="battle-board-slide battle-board-fleet" aria-hidden={battleBoardView !== "fleet"}>
+                  <BoardGrid
+                    board={game.localBoard}
+                    revealShips
+                    attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
+                    label="Your board"
+                  />
+                </div>
+              </div>
             </>
           )}
           {(game.phase === "victory" || game.phase === "defeat") && (

@@ -13,6 +13,7 @@ interface BoardGridProps {
   board: BoardState;
   revealShips: boolean;
   interactive?: boolean;
+  selectedCoord?: Coordinate | null;
   selectedShip?: ShipDefinition;
   orientation?: Orientation;
   onCellPress?: (coord: Coordinate) => void;
@@ -35,6 +36,7 @@ export function BoardGrid({
   board,
   revealShips,
   interactive = false,
+  selectedCoord,
   onCellPress,
   onCellHover,
   preview,
@@ -93,10 +95,11 @@ export function BoardGrid({
           const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
           const sunkBuffer = sunkBufferMap.has(key);
           const sunkShip = sunkShipMap.has(key);
+          const selected = selectedCoord && coordKey(selectedCoord) === key;
 
           return (
             <button
-              className={`${cellClass(value, previewState)}${sunkBuffer ? " cell-sunk-buffer" : ""}${sunkShip ? " cell-sunk-ship" : ""}`}
+              className={`${cellClass(value, previewState)}${sunkBuffer ? " cell-sunk-buffer" : ""}${sunkShip ? " cell-sunk-ship" : ""}${selected ? " cell-selected-target" : ""}`}
               key={key}
               type="button"
               disabled={!interactive}
