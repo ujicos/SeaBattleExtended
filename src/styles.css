@@ -763,7 +763,7 @@ select {
 .battle-board-slide {
   grid-area: 1 / 1;
   min-width: 0;
-  transition: transform 360ms cubic-bezier(0.22, 0.84, 0.32, 1), opacity 240ms ease;
+  transition: transform 620ms cubic-bezier(0.22, 0.84, 0.32, 1), opacity 420ms ease;
 }
 
 .battle-board-slide[aria-hidden="true"] {

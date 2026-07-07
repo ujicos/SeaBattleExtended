@@ -38,7 +38,7 @@ function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): str
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
-const BOARD_RETURN_DELAY_MS = 2800;
+const BOARD_RETURN_DELAY_MS = 1200;
 
 interface ReadyPayload {
   board: BoardState;
