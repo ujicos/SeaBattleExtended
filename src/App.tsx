@@ -81,6 +81,7 @@ function App() {
   const [networkStatus, setNetworkStatus] = useState("Offline practice");
   const [opponent, setOpponent] = useState<PeerIdentity>(guestIdentity);
   const [clock, setClock] = useState<number>(defaultSettings.blitz.seconds);
+  const clockRef = useRef(clock);
   const [showOpponentStats, setShowOpponentStats] = useState(false);
   const [attackVisual, setAttackVisual] = useState<(AttackAnimation & { board: "local" | "remote" }) | null>(null);
   const [matchMode, setMatchMode] = useState<MatchMode>("practice");
@@ -269,16 +270,23 @@ function App() {
   }, [stats]);
 
   useEffect(() => {
-    return rafLoop(() => {
+    return rafLoop((deltaMs) => {
       if (game.phase !== "battle" || !game.settings.blitz.enabled) {
         return;
       }
-      setClock((value) => Math.max(0, value - 1 / 120));
+      const next = Math.max(0, clockRef.current - deltaMs / 1000);
+      clockRef.current = next;
+      // The UI only ever displays Math.ceil(clock), so only push a state
+      // update (and trigger a re-render) when that displayed value actually
+      // changes, instead of on every single animation frame (previously up
+      // to 120x/sec on high refresh-rate displays).
+      setClock((value) => (Math.ceil(next) === Math.ceil(value) ? value : next));
     });
   }, [game.phase, game.settings.blitz.enabled]);
 
   useEffect(() => {
     if (game.phase === "battle") {
+      clockRef.current = game.settings.blitz.seconds;
       setClock(game.settings.blitz.seconds);
     }
   }, [game.turn, game.phase, game.settings.blitz.seconds]);

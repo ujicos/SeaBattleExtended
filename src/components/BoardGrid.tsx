@@ -165,7 +165,7 @@ export function BoardGrid({
                 <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
               )}
               {(value === "hit" || value === "sunk") && <span className="blast" />}
-              {(value === "hit" || value === "sunk") && <span className="smoke" />}
+              {value === "hit" && <span className="smoke" />}
             </button>
           );
         })}
