@@ -155,8 +155,8 @@ export function BoardGrid({
               onPointerDown={() => onCellPress?.(coord)}
             >
               {value === "miss" && <Waves size={13} />}
-              {ship && (value === "ship" || value === "hit" || value === "sunk") && (
-                <ShipSprite ship={ship} coord={coord} destroyed={sunkShip || value === "hit" || value === "sunk"} />
+              {ship && (value === "ship" || sunkShip) && (
+                <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
               )}
               {(value === "hit" || value === "sunk") && <span className="blast" />}
               {(value === "hit" || value === "sunk") && <span className="smoke" />}

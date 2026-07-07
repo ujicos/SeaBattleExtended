@@ -38,6 +38,7 @@ function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): str
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
+const BOARD_SWITCH_DELAY_MS = 250;
 const BOARD_RETURN_DELAY_MS = 1200;
 
 interface ReadyPayload {
@@ -82,6 +83,8 @@ function App() {
   const peerRoleRef = useRef<PeerRole>(null);
   const opponentRef = useRef(opponent);
   const remoteBoardReadyRef = useRef<BoardState | null>(null);
+  const boardSwitchTimer = useRef<number | null>(null);
+  const boardReturnTimer = useRef<number | null>(null);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
   const selectedShip = config.fleet.find((ship) => ship.id === game.selectedShipId);
@@ -143,10 +146,26 @@ function App() {
     window.setTimeout(() => setAttackVisual((current) => (current?.coord === coord && current.board === board ? null : current)), 920);
   }
 
-  function showBattleBoard(view: BattleBoardView, holdMs = 0) {
+  function showBattleBoard(view: BattleBoardView, holdMs = 0, delayMs = 0) {
+    if (boardSwitchTimer.current !== null) {
+      window.clearTimeout(boardSwitchTimer.current);
+      boardSwitchTimer.current = null;
+    }
+    if (boardReturnTimer.current !== null) {
+      window.clearTimeout(boardReturnTimer.current);
+      boardReturnTimer.current = null;
+    }
+    if (delayMs > 0) {
+      boardSwitchTimer.current = window.setTimeout(() => {
+        boardSwitchTimer.current = null;
+        showBattleBoard(view, holdMs);
+      }, delayMs);
+      return;
+    }
     setBattleBoardView(view);
     if (holdMs > 0) {
-      window.setTimeout(() => {
+      boardReturnTimer.current = window.setTimeout(() => {
+        boardReturnTimer.current = null;
         const current = gameRef.current;
         if (current.phase === "battle" && current.turn === "local") {
           setBattleBoardView("target");
@@ -291,7 +310,11 @@ function App() {
       return;
     }
     setSelectedTarget(null);
-    showBattleBoard("fleet", outcome.nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
+    showBattleBoard(
+      outcome.nextTurn === "local" ? "target" : "fleet",
+      outcome.nextTurn === "remote" ? BOARD_RETURN_DELAY_MS : 0,
+      outcome.nextTurn === "remote" ? BOARD_SWITCH_DELAY_MS : 0
+    );
     playAttackVisual("remote", coord, outcome.result);
     audio.play(outcome.result === "miss" ? "miss" : "hit");
     setGame(state);
