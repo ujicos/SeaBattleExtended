@@ -22,6 +22,7 @@ import {
   type PlayerProfile,
   type PlayerStats
 } from "./services/storage";
+import { loadAppVersion, type AppVersion } from "./services/version";
 import type { BoardState, Coordinate, GameSettings, GameState, Orientation, PeerIdentity, PlayerSide, ShotResult } from "./types/game";
 
 const guestIdentity: PeerIdentity = {
@@ -79,6 +80,7 @@ function App() {
   const [remoteBoardReady, setRemoteBoardReady] = useState<BoardState | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<Coordinate | null>(null);
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
+  const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -200,6 +202,10 @@ function App() {
 
   useEffect(() => {
     assets.preload();
+  }, []);
+
+  useEffect(() => {
+    void loadAppVersion().then(setAppVersion);
   }, []);
 
   useEffect(() => {
@@ -606,7 +612,10 @@ function App() {
         >
           <Anchor />
           <div>
-            <strong>Sea Battle Extended</strong>
+            <strong>
+              Sea Battle Extended
+              <span className="version-badge">{appVersion?.commit ? `v${appVersion.commit.slice(0, 7)}` : "local"}</span>
+            </strong>
             <small>120Hz-ready WebRTC battles</small>
           </div>
         </button>

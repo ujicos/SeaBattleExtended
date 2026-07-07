@@ -1,4 +1,4 @@
-interface AppVersion {
+export interface AppVersion {
   version: string;
   commit?: string;
   builtAt?: string;
@@ -27,6 +27,10 @@ async function fetchVersion(): Promise<AppVersion | null> {
   } catch {
     return null;
   }
+}
+
+export async function loadAppVersion(): Promise<AppVersion | null> {
+  return fetchVersion();
 }
 
 async function checkForUpdate(): Promise<void> {
