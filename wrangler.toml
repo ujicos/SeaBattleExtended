@@ -1,4 +1,4 @@
-name = "sea-battle-signaling"
+name = "seabattle-extended"
 main = "worker/signaling.ts"
 compatibility_date = "2026-07-07"
 
