@@ -1,0 +1,12 @@
+name = "sea-battle-signaling"
+main = "worker/signaling.ts"
+compatibility_date = "2026-07-07"
+
+[durable_objects]
+bindings = [
+  { name = "ROOMS", class_name = "SignalingRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SignalingRoom"]

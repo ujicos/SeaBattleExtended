@@ -1,0 +1,122 @@
+# Sea Battle Extended
+
+A mobile-first React/TypeScript web implementation of a GamePigeon-style Sea Battle MVP.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+For local Node WebRTC room signaling in another terminal:
+
+```bash
+npm run signal
+```
+
+Then open the Vite URL, normally `http://localhost:5173`.
+
+## Cloudflare Worker Signaling
+
+The production signaling service lives in `worker/signaling.ts` and uses one Durable Object per room. This is the piece GitHub Pages cannot run by itself.
+
+Install and log in:
+
+```bash
+npm install
+npx wrangler login
+```
+
+Test the Worker locally:
+
+```bash
+npm run worker:dev
+```
+
+In another terminal, point the frontend at that local Worker:
+
+```bash
+VITE_SIGNALING_URL=ws://localhost:8787 npm run dev
+```
+
+Deploy the Worker:
+
+```bash
+npm run worker:deploy
+```
+
+Wrangler will print a URL like:
+
+```text
+https://sea-battle-signaling.YOUR_SUBDOMAIN.workers.dev
+```
+
+Use the WebSocket version in `.env.local`:
+
+```bash
+VITE_SIGNALING_URL=wss://sea-battle-signaling.YOUR_SUBDOMAIN.workers.dev
+```
+
+Then build the frontend:
+
+```bash
+npm run build
+```
+
+## GitHub Pages
+
+The Vite app is configured with `base: "/SeaBattleExtended/"`, so the static build works from a repository Pages URL such as:
+
+```text
+https://YOUR_USERNAME.github.io/SeaBattleExtended/
+```
+
+Build with:
+
+```bash
+npm run build
+```
+
+Publish the generated `dist` folder with your preferred GitHub Pages workflow.
+
+Important: GitHub Pages cannot run WebSocket signaling. The game UI and local practice mode work as static Pages content, but online P2P rooms need the Cloudflare Worker `wss://` signaling endpoint. Set it at build time:
+
+```bash
+VITE_SIGNALING_URL=wss://your-signaling-host.example npm run build
+```
+
+## Implemented
+
+- Configurable board presets: 8x8, 9x9, 10x10, 12x12, 14x14, 16x16, and generated 32x32 fleet.
+- Rule engine with horizontal/vertical ships, no overlap, and a one-cell buffer including diagonals.
+- GamePigeon-style combat: miss ends turn, hit/sunk keeps turn, all ships sunk wins.
+- Touch/mouse ship placement, rotate, hover preview, and repeatable shuffle.
+- Local practice battle against a generated opponent fleet.
+- Blitz mode options with 5/10/15/30 second timers and configurable timeout behavior.
+- Local player profile, persistent player ID, avatar token, stats, opponent history, match history.
+- Profile export/import through JSON.
+- WebRTC data-channel client, local Node signaling server, and Cloudflare Worker Durable Object signaling for hosted room codes.
+- Asset manager and audio manager with stable public drop-in paths.
+- Responsive mobile-first UI using CSS, no frame-locked animation loop.
+
+## Asset Paths
+
+Drop your files into:
+
+- `public/assets/audio`
+- `public/assets/textures`
+- `public/assets/sprites`
+
+The manifest is in `src/services/assets.ts`. Replace or extend keys there to map game events to your files.
+
+## Architecture
+
+- `src/game` contains board config, placement rules, combat engine, and animation timing helpers.
+- `src/services` contains storage, assets, audio, and WebRTC networking.
+- `src/components` contains reusable UI panels and the board renderer.
+- `server/signaling.ts` is intentionally minimal and stores no permanent game data.
+
+## Notes
+
+The current gameplay MVP is fully playable locally. The P2P layer establishes rooms and a WebRTC data channel with identity exchange; GitHub Pages deployment requires the Cloudflare Worker signaling URL because Pages is static-only hosting.
