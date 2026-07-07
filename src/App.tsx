@@ -799,7 +799,7 @@ function App() {
                   </button>
                 </div>
               </section>
-              <div className={`battle-board-stage showing-${battleBoardView}`}>
+              <div className={`battle-board-stage showing-${battleBoardView}${game.phase === "battle" && game.turn === "local" ? " your-turn" : ""}`}>
                 <div className="battle-board-slide battle-board-target" aria-hidden={battleBoardView !== "target"}>
                   <BoardGrid
                     board={game.remoteBoard}
