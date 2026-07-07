@@ -4,6 +4,7 @@ dist
 .env
 .env.local
 .wrangler
+public/version.json
 .DS_Store
 public/.DS_Store
 public/assets/.DS_Store
