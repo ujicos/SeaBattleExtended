@@ -1,8 +1,8 @@
 import bomberFlybyUrl from "../assets/audio/bomber_flyby.mp3";
 import defeatUrl from "../assets/audio/defeat.mp3";
+import explodeUrl from "../assets/audio/explode.mp3";
 import victoryUrl from "../assets/audio/victory.mp3";
 import waterMissUrl from "../assets/audio/water_miss.mp3";
-import whizzHitUrl from "../assets/audio/whizz_hit.mp3";
 
 export type AssetKind = "audio" | "texture" | "sprite";
 
@@ -14,7 +14,7 @@ export interface AssetEntry {
 }
 export const assetManifest: AssetEntry[] = [
   { key: "flyby", kind: "audio", path: bomberFlybyUrl, description: "Bomber plane flyby" },
-  { key: "hit", kind: "audio", path: whizzHitUrl, description: "Successful ship hit" },
+  { key: "hit", kind: "audio", path: explodeUrl, description: "Successful ship hit explosion" },
   { key: "miss", kind: "audio", path: waterMissUrl, description: "Water splash miss" },
   { key: "victory", kind: "audio", path: victoryUrl, description: "Victory sting" },
   { key: "defeat", kind: "audio", path: defeatUrl, description: "Defeat sting" },
