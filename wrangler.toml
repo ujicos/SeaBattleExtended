@@ -10,3 +10,4 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalingRoom"]
+name = 'seabattle-extended'
