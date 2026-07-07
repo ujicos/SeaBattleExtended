@@ -27,6 +27,14 @@ export function cellsTouch(a: Coordinate, b: Coordinate): boolean {
   return Math.abs(a.row - b.row) <= 1 && Math.abs(a.col - b.col) <= 1;
 }
 
+function makeSpriteSeed(ship: ShipDefinition): string {
+  return `${ship.id}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getSpriteSeed(ship: ShipDefinition): string {
+  return "spriteSeed" in ship && typeof ship.spriteSeed === "string" ? ship.spriteSeed : makeSpriteSeed(ship);
+}
+
 export function canPlaceShip(
   board: BoardState,
   ship: ShipDefinition,
@@ -60,7 +68,8 @@ export function placeShip(
     ...ship,
     origin,
     orientation,
-    hits: []
+    hits: "hits" in ship && Array.isArray(ship.hits) ? ship.hits : [],
+    spriteSeed: getSpriteSeed(ship)
   };
 
   return {

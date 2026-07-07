@@ -19,6 +19,7 @@ export interface PlacedShip extends ShipDefinition {
   orientation: Orientation;
   origin: Coordinate;
   hits: Coordinate[];
+  spriteSeed: string;
 }
 
 export interface BoardConfig {

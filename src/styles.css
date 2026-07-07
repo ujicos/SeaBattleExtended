@@ -401,7 +401,7 @@ select {
 }
 
 .cell-ship {
-  background: #58727a;
+  background: #1b5367;
 }
 
 .cell-miss {
@@ -427,6 +427,126 @@ select {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
     #202426;
+}
+
+.ship-sprite {
+  position: absolute;
+  inset: 8%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  --ship-main: #9fb8b2;
+  --ship-edge: #617a78;
+  --ship-light: #d6f1ea;
+  --ship-shadow: rgba(3, 10, 12, 0.42);
+}
+
+.ship-hull,
+.ship-deck,
+.ship-crack {
+  grid-area: 1 / 1;
+}
+
+.ship-hull {
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 38%),
+    linear-gradient(180deg, var(--ship-light), var(--ship-main) 46%, var(--ship-edge));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 2px 5px var(--ship-shadow);
+}
+
+.ship-horizontal.ship-bow .ship-hull {
+  clip-path: polygon(0 20%, 72% 20%, 100% 50%, 72% 80%, 0 80%);
+}
+
+.ship-horizontal.ship-stern .ship-hull {
+  clip-path: polygon(0 50%, 28% 20%, 100% 20%, 100% 80%, 28% 80%);
+}
+
+.ship-horizontal.ship-middle .ship-hull {
+  clip-path: polygon(0 20%, 100% 20%, 100% 80%, 0 80%);
+}
+
+.ship-horizontal.ship-solo .ship-hull {
+  clip-path: polygon(10% 50%, 30% 20%, 70% 20%, 90% 50%, 70% 80%, 30% 80%);
+}
+
+.ship-vertical.ship-bow .ship-hull {
+  clip-path: polygon(20% 0, 80% 0, 80% 72%, 50% 100%, 20% 72%);
+}
+
+.ship-vertical.ship-stern .ship-hull {
+  clip-path: polygon(50% 0, 80% 28%, 80% 100%, 20% 100%, 20% 28%);
+}
+
+.ship-vertical.ship-middle .ship-hull {
+  clip-path: polygon(20% 0, 80% 0, 80% 100%, 20% 100%);
+}
+
+.ship-vertical.ship-solo .ship-hull {
+  clip-path: polygon(50% 8%, 80% 30%, 80% 70%, 50% 92%, 20% 70%, 20% 30%);
+}
+
+.ship-deck {
+  width: 42%;
+  height: 42%;
+  border-radius: 2px;
+  background: rgba(7, 28, 36, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(226, 252, 246, 0.16);
+}
+
+.ship-horizontal .ship-deck {
+  width: 28%;
+  height: 38%;
+}
+
+.ship-vertical .ship-deck {
+  width: 38%;
+  height: 28%;
+}
+
+.ship-horizontal.ship-variant-2 .ship-deck {
+  translate: -18% 0;
+}
+
+.ship-horizontal.ship-variant-3 .ship-deck {
+  translate: 18% 0;
+}
+
+.ship-horizontal.ship-variant-4 .ship-deck {
+  width: 54%;
+}
+
+.ship-vertical.ship-variant-2 .ship-deck {
+  translate: 0 -18%;
+}
+
+.ship-vertical.ship-variant-3 .ship-deck {
+  translate: 0 18%;
+}
+
+.ship-vertical.ship-variant-4 .ship-deck {
+  height: 54%;
+}
+
+.ship-destroyed {
+  --ship-main: #444b4c;
+  --ship-edge: #181d1e;
+  --ship-light: #6f7878;
+  --ship-shadow: rgba(0, 0, 0, 0.6);
+  opacity: 0.96;
+}
+
+.ship-crack {
+  width: 82%;
+  height: 82%;
+  background: #090b0c;
+  clip-path: polygon(47% 0, 58% 0, 50% 34%, 67% 34%, 42% 100%, 49% 52%, 33% 52%);
+  opacity: 0.76;
 }
 
 .cell-preview-valid {

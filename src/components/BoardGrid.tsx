@@ -1,6 +1,6 @@
-import { Ship, Waves } from "lucide-react";
+import { Waves } from "lucide-react";
 import { coordKey, findShipAt, getShipBufferCells, getVisibleCell, isShipSunk } from "../game/board";
-import type { BoardState, Coordinate, Orientation, ShipDefinition, ShotResult } from "../types/game";
+import type { BoardState, Coordinate, Orientation, PlacedShip, ShipDefinition, ShotResult } from "../types/game";
 
 export interface AttackAnimation {
   id: string;
@@ -30,6 +30,53 @@ function cellClass(value: "empty" | "ship" | ShotResult, preview?: "valid" | "in
     classes.push(`cell-preview-${preview}`);
   }
   return classes.join(" ");
+}
+
+function hashSegment(seed: string): number {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) % 9973;
+  }
+  return hash;
+}
+
+function shipSegmentIndex(ship: PlacedShip, coord: Coordinate): number {
+  return ship.orientation === "horizontal" ? coord.col - ship.origin.col : coord.row - ship.origin.row;
+}
+
+function shipSegmentKind(ship: PlacedShip, index: number): "solo" | "bow" | "middle" | "stern" {
+  if (ship.length === 1) {
+    return "solo";
+  }
+  if (index === 0) {
+    return "bow";
+  }
+  if (index === ship.length - 1) {
+    return "stern";
+  }
+  return "middle";
+}
+
+interface ShipSpriteProps {
+  ship: PlacedShip;
+  coord: Coordinate;
+  destroyed: boolean;
+}
+
+function ShipSprite({ ship, coord, destroyed }: ShipSpriteProps) {
+  const index = shipSegmentIndex(ship, coord);
+  const kind = shipSegmentKind(ship, index);
+  const variant = kind === "middle" ? (hashSegment(`${ship.spriteSeed ?? ship.id}:${index}`) % 4) + 1 : 1;
+  return (
+    <span
+      className={`ship-sprite ship-${ship.orientation} ship-${kind} ship-variant-${variant}${destroyed ? " ship-destroyed" : ""}`}
+      aria-hidden="true"
+    >
+      <span className="ship-hull" />
+      {kind === "middle" && <span className="ship-deck" />}
+      {destroyed && <span className="ship-crack" />}
+    </span>
+  );
 }
 
 export function BoardGrid({
@@ -90,7 +137,7 @@ export function BoardGrid({
         )}
         {cells.map((coord) => {
           const value = getVisibleCell(board, coord, revealShips);
-          const ship = revealShips ? findShipAt(board, coord) : undefined;
+          const ship = revealShips || value === "hit" || value === "sunk" ? findShipAt(board, coord) : undefined;
           const key = coordKey(coord);
           const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
           const sunkBuffer = sunkBufferMap.has(key);
@@ -108,10 +155,11 @@ export function BoardGrid({
               onPointerDown={() => onCellPress?.(coord)}
             >
               {value === "miss" && <Waves size={13} />}
+              {ship && (value === "ship" || value === "hit" || value === "sunk") && (
+                <ShipSprite ship={ship} coord={coord} destroyed={sunkShip || value === "hit" || value === "sunk"} />
+              )}
               {(value === "hit" || value === "sunk") && <span className="blast" />}
               {(value === "hit" || value === "sunk") && <span className="smoke" />}
-              {sunkShip && <span className="wreck" />}
-              {ship && value === "ship" && <Ship size={Math.max(10, Math.min(16, 180 / board.size))} />}
             </button>
           );
         })}
