@@ -475,30 +475,29 @@ function App() {
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
+        <nav className={menuOpen ? "tabbar menu-popover open" : "tabbar menu-popover"} aria-hidden={!menuOpen}>
+          {[
+            ["play", Shield, "Play"],
+            ["lobby", Radio, "Lobby"],
+            ["profile", Settings, "Profile"],
+            ["stats", Trophy, "Stats"]
+          ].map(([key, Icon, label]) => (
+            <button
+              className={activeTab === key ? "active" : ""}
+              type="button"
+              key={key as string}
+              tabIndex={menuOpen ? 0 : -1}
+              onClick={() => {
+                setActiveTab(key as typeof activeTab);
+                setMenuOpen(false);
+              }}
+            >
+              <Icon size={19} />
+              <span>{label as string}</span>
+            </button>
+          ))}
+        </nav>
       </header>
-
-      <nav className={menuOpen ? "tabbar menu-popover open" : "tabbar menu-popover"} aria-hidden={!menuOpen}>
-        {[
-          ["play", Shield, "Play"],
-          ["lobby", Radio, "Lobby"],
-          ["profile", Settings, "Profile"],
-          ["stats", Trophy, "Stats"]
-        ].map(([key, Icon, label]) => (
-          <button
-            className={activeTab === key ? "active" : ""}
-            type="button"
-            key={key as string}
-            tabIndex={menuOpen ? 0 : -1}
-            onClick={() => {
-              setActiveTab(key as typeof activeTab);
-              setMenuOpen(false);
-            }}
-          >
-            <Icon size={19} />
-            <span>{label as string}</span>
-          </button>
-        ))}
-      </nav>
 
       {activeTab === "play" && (
         <div className={game.phase === "battle" || game.phase === "victory" || game.phase === "defeat" ? "content-grid battle-grid" : "content-grid setup-focus"}>
