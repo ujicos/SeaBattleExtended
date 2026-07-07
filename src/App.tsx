@@ -38,6 +38,7 @@ function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): str
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
+const BOARD_RETURN_DELAY_MS = 2800;
 
 interface ReadyPayload {
   board: BoardState;
@@ -290,12 +291,12 @@ function App() {
       return;
     }
     setSelectedTarget(null);
-    showBattleBoard("fleet", outcome.nextTurn === "local" ? 1400 : 0);
+    showBattleBoard("fleet", outcome.nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
     playAttackVisual("remote", coord, outcome.result);
     audio.play(outcome.result === "miss" ? "miss" : "hit");
     setGame(state);
     setStats((current) => ({ ...current, totalShots: current.totalShots + 1, hits: current.hits + (outcome.result === "miss" ? 0 : 1), shipsDestroyed: current.shipsDestroyed + (outcome.result === "sunk" ? 1 : 0) }));
-    network.current?.send("shot", coord);
+    network.current?.send("shot", { coord } satisfies ShotPayload);
     if (outcome.winner) {
       endMatch("win", state);
       return;
@@ -317,7 +318,7 @@ function App() {
     const { state, outcome } = attack(currentGame, "local", pick);
     if (outcome.result !== "invalid" && outcome.result !== "duplicate") {
       playAttackVisual("local", pick, outcome.result);
-      showBattleBoard("fleet", outcome.nextTurn === "local" ? 1500 : 0);
+      showBattleBoard("fleet", outcome.nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
     }
     setGame(state);
     if (outcome.winner) {
@@ -440,7 +441,9 @@ function App() {
       }
 
       if (message.type === "shot") {
-        receiveRemoteShot((message.payload as ShotPayload).coord);
+        const payload = message.payload as ShotPayload | Coordinate;
+        const coord = "coord" in payload ? payload.coord : payload;
+        receiveRemoteShot(coord);
         return;
       }
 
@@ -478,7 +481,7 @@ function App() {
     playAttackVisual("local", coord, shot.result);
     const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
     const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
-    showBattleBoard("fleet", nextTurn === "local" ? 1500 : 0);
+    showBattleBoard("fleet", nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
     const nextState: GameState = {
       ...current,
       localBoard: shot.board,
@@ -519,7 +522,7 @@ function App() {
       if (nextWinner === "local") {
         endMatch("win", nextState);
       }
-      showBattleBoard("fleet", nextTurn === "local" && !nextWinner ? 1400 : 0);
+      showBattleBoard("fleet", nextTurn === "local" && !nextWinner ? BOARD_RETURN_DELAY_MS : 0);
       return nextState;
     });
   }
