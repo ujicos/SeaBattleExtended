@@ -151,6 +151,15 @@ function App() {
     audio.play("turn", 0.8);
   }
 
+  function playShotResultSound(result: ShotResult, volume = 1): void {
+    if (result === "miss") {
+      audio.play("miss", volume);
+      return;
+    }
+    audio.play("whizz-hit", volume);
+    audio.play("hit", volume);
+  }
+
   function showBattleBoard(view: BattleBoardView, holdMs = 0, delayMs = 0) {
     if (boardSwitchTimer.current !== null) {
       window.clearTimeout(boardSwitchTimer.current);
@@ -328,7 +337,7 @@ function App() {
       outcome.nextTurn === "remote" ? BOARD_SWITCH_DELAY_MS : 0
     );
     playAttackVisual("remote", coord, outcome.result);
-    audio.play(outcome.result === "miss" ? "miss" : "hit");
+    playShotResultSound(outcome.result);
     setGame(state);
     setStats((current) => ({ ...current, totalShots: current.totalShots + 1, hits: current.hits + (outcome.result === "miss" ? 0 : 1), shipsDestroyed: current.shipsDestroyed + (outcome.result === "sunk" ? 1 : 0) }));
     network.current?.send("shot", { coord } satisfies ShotPayload);
@@ -353,7 +362,7 @@ function App() {
     const { state, outcome } = attack(currentGame, "local", pick);
     if (outcome.result !== "invalid" && outcome.result !== "duplicate") {
       playAttackVisual("local", pick, outcome.result, OPPONENT_SOUND_VOLUME);
-      audio.play(outcome.result === "miss" ? "miss" : "hit", OPPONENT_SOUND_VOLUME);
+      playShotResultSound(outcome.result, OPPONENT_SOUND_VOLUME);
       showBattleBoard("fleet", outcome.nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
     }
     setGame(state);
@@ -517,7 +526,7 @@ function App() {
       return;
     }
     playAttackVisual("local", coord, shot.result, OPPONENT_SOUND_VOLUME);
-    audio.play(shot.result === "miss" ? "miss" : "hit", OPPONENT_SOUND_VOLUME);
+    playShotResultSound(shot.result, OPPONENT_SOUND_VOLUME);
     const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
     const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
     showBattleBoard("fleet", nextTurn === "local" ? BOARD_RETURN_DELAY_MS : 0);
