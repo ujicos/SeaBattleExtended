@@ -578,6 +578,19 @@ function App() {
                     <span>Multiplayer fleet</span>
                     <small>{networkStatus}</small>
                   </div>
+                  {roomCode && (
+                    <div className="setup-room-code">
+                      <div>
+                        <small>{peerRole === "host" ? "Share code" : "Room code"}</small>
+                        <strong>{roomCode}</strong>
+                      </div>
+                      {peerRole === "host" && (
+                        <button className="secondary compact-action" type="button" onClick={() => void navigator.clipboard?.writeText(roomCode)}>
+                          Copy
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="ready-grid">
                     <div className={localReady ? "ready-pill ready" : "ready-pill"}>
                       <small>Your fleet</small>

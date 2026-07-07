@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048">
+  <defs>
+    <linearGradient id="pageGradient" x1="12%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07151f"/>
+      <stop offset="54%" stop-color="#102c35"/>
+      <stop offset="100%" stop-color="#1d3c3a"/>
+    </linearGradient>
+    <radialGradient id="accentGlow" cx="12%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#48d0bb" stop-opacity="0.26"/>
+      <stop offset="55%" stop-color="#48d0bb" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#48d0bb" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="anchorShadow" x="-35%" y="-35%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="42" stdDeviation="42" flood-color="#000000" flood-opacity="0.38"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#48d0bb" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+  <rect width="2048" height="2048" fill="url(#pageGradient)"/>
+  <rect width="2048" height="2048" fill="url(#accentGlow)"/>
+  <g opacity="0.16" fill="none" stroke="#48d0bb" stroke-width="10" stroke-linecap="round">
+    <path d="M0 312c137 68 273 68 410 0s273-68 410 0 273 68 410 0 273-68 410 0 273 68 408 0"/>
+    <path d="M0 624c137 68 273 68 410 0s273-68 410 0 273 68 410 0 273-68 410 0 273 68 408 0"/>
+    <path d="M0 936c137 68 273 68 410 0s273-68 410 0 273 68 410 0 273-68 410 0 273 68 408 0"/>
+    <path d="M0 1248c137 68 273 68 410 0s273-68 410 0 273 68 410 0 273-68 410 0 273 68 408 0"/>
+    <path d="M0 1560c137 68 273 68 410 0s273-68 410 0 273 68 410 0 273-68 410 0 273 68 408 0"/>
+  </g>
+  <circle cx="1024" cy="1024" r="694" fill="#07151f" opacity="0.18"/>
+  <g transform="translate(328 300) scale(58)" fill="none" stroke="#48d0bb" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" filter="url(#anchorShadow)">
+    <circle cx="12" cy="5" r="3"/>
+    <path d="M12 22V8"/>
+    <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+    <path d="M19 18l-7 4-7-4"/>
+  </g>
+  <g transform="translate(328 300) scale(58)" fill="none" stroke="#d9fff7" stroke-width="0.42" stroke-linecap="round" stroke-linejoin="round" opacity="0.62">
+    <circle cx="12" cy="5" r="3"/>
+    <path d="M12 22V8"/>
+    <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+    <path d="M19 18l-7 4-7-4"/>
+  </g>
+</svg>
