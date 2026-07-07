@@ -472,7 +472,7 @@ select {
 }
 
 .ship-horizontal.ship-solo .ship-hull {
-  clip-path: polygon(10% 50%, 30% 20%, 70% 20%, 90% 50%, 70% 80%, 30% 80%);
+  clip-path: polygon(0 50%, 34% 16%, 100% 16%, 100% 84%, 34% 84%);
 }
 
 .ship-vertical.ship-bow .ship-hull {
@@ -488,7 +488,7 @@ select {
 }
 
 .ship-vertical.ship-solo .ship-hull {
-  clip-path: polygon(50% 8%, 80% 30%, 80% 70%, 50% 92%, 20% 70%, 20% 30%);
+  clip-path: polygon(50% 0, 84% 34%, 84% 100%, 16% 100%, 16% 34%);
 }
 
 .ship-deck {

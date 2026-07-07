@@ -54,6 +54,28 @@ export function canPlaceShip(
   );
 }
 
+export function hasLegalFleetPlacement(board: BoardState, config: BoardConfig): boolean {
+  if (board.size !== config.size || board.ships.length !== config.fleet.length) {
+    return false;
+  }
+
+  const requiredShips = new Map(config.fleet.map((ship) => [ship.id, ship.length]));
+  const placedShips = new Set<string>();
+
+  for (const ship of board.ships) {
+    if (placedShips.has(ship.id) || requiredShips.get(ship.id) !== ship.length) {
+      return false;
+    }
+    placedShips.add(ship.id);
+
+    if (!isInsideBoard(board.size, getShipCells(ship)) || !canPlaceShip(board, ship, ship.origin, ship.orientation, ship.id)) {
+      return false;
+    }
+  }
+
+  return placedShips.size === requiredShips.size;
+}
+
 export function placeShip(
   board: BoardState,
   ship: ShipDefinition,
@@ -178,7 +200,7 @@ export function randomizeFleet(config: BoardConfig, maxAttempts = 900): BoardSta
       board = placeShip(board, ship, pick.origin, pick.orientation);
     }
 
-    if (!failed) {
+    if (!failed && hasLegalFleetPlacement(board, config)) {
       return board;
     }
   }

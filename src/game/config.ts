@@ -8,17 +8,39 @@ function ship(name: string, length: number): ShipDefinition {
   };
 }
 
+const suffixes = [
+  "Alpha",
+  "Beta",
+  "Gamma",
+  "Delta",
+  "Epsilon",
+  "Zeta",
+  "Eta",
+  "Theta",
+  "Iota",
+  "Kappa",
+  "Lambda",
+  "Mu",
+  "Nu",
+  "Xi",
+  "Omicron",
+  "Pi"
+];
+
+function ships(name: string, length: number, count = 1): ShipDefinition[] {
+  return Array.from({ length: count }, (_, index) => ship(count === 1 ? name : `${name} ${suffixes[index] ?? index + 1}`, length));
+}
+
 export const boardConfigs: BoardConfig[] = [
   {
     id: "classic-8",
     label: "Classic 8x8",
     size: 8,
     fleet: [
-      ship("Carrier", 4),
-      ship("Battleship", 3),
-      ship("Cruiser", 3),
-      ship("Submarine", 2),
-      ship("Destroyer", 2)
+      ...ships("Battleship", 4),
+      ...ships("Cruiser", 3),
+      ...ships("Destroyer", 2, 2),
+      ...ships("Scout Boat", 1, 3)
     ]
   },
   {
@@ -26,11 +48,10 @@ export const boardConfigs: BoardConfig[] = [
     label: "Classic 9x9",
     size: 9,
     fleet: [
-      ship("Carrier", 5),
-      ship("Battleship", 4),
-      ship("Cruiser", 3),
-      ship("Submarine", 3),
-      ship("Destroyer", 2)
+      ...ships("Battleship", 4),
+      ...ships("Cruiser", 3, 2),
+      ...ships("Destroyer", 2, 2),
+      ...ships("Scout Boat", 1, 4)
     ]
   },
   {
@@ -38,11 +59,10 @@ export const boardConfigs: BoardConfig[] = [
     label: "Classic 10x10",
     size: 10,
     fleet: [
-      ship("Carrier", 5),
-      ship("Battleship", 4),
-      ship("Cruiser", 3),
-      ship("Submarine", 3),
-      ship("Destroyer", 2)
+      ...ships("Battleship", 4),
+      ...ships("Cruiser", 3, 2),
+      ...ships("Destroyer", 2, 3),
+      ...ships("Scout Boat", 1, 4)
     ]
   },
   {
@@ -50,12 +70,11 @@ export const boardConfigs: BoardConfig[] = [
     label: "Extended 12x12",
     size: 12,
     fleet: [
-      ship("Super Carrier", 6),
-      ship("Battleship", 5),
-      ship("Cruiser", 4),
-      ship("Submarine", 3),
-      ship("Destroyer", 3),
-      ship("Patrol Boat", 2)
+      ...ships("Carrier", 5),
+      ...ships("Battleship", 4, 2),
+      ...ships("Cruiser", 3, 2),
+      ...ships("Destroyer", 2, 3),
+      ...ships("Scout Boat", 1, 5)
     ]
   },
   {
@@ -63,13 +82,12 @@ export const boardConfigs: BoardConfig[] = [
     label: "Extended 14x14",
     size: 14,
     fleet: [
-      ship("Super Carrier", 7),
-      ship("Battleship", 6),
-      ship("Heavy Cruiser", 5),
-      ship("Cruiser", 4),
-      ship("Submarine", 4),
-      ship("Destroyer", 3),
-      ship("Patrol Boat", 2)
+      ...ships("Super Carrier", 6),
+      ...ships("Battleship", 5),
+      ...ships("Cruiser", 4, 2),
+      ...ships("Submarine", 3, 3),
+      ...ships("Destroyer", 2, 3),
+      ...ships("Scout Boat", 1, 6)
     ]
   },
   {
@@ -77,14 +95,13 @@ export const boardConfigs: BoardConfig[] = [
     label: "Extended 16x16",
     size: 16,
     fleet: [
-      ship("Super Carrier", 8),
-      ship("Battleship", 7),
-      ship("Heavy Cruiser", 6),
-      ship("Cruiser", 5),
-      ship("Submarine", 5),
-      ship("Destroyer", 4),
-      ship("Patrol Boat", 3),
-      ship("Scout Boat", 2)
+      ...ships("Super Carrier", 7),
+      ...ships("Battleship", 6),
+      ...ships("Heavy Cruiser", 5, 2),
+      ...ships("Cruiser", 4, 2),
+      ...ships("Submarine", 3, 2),
+      ...ships("Destroyer", 2, 4),
+      ...ships("Scout Boat", 1, 8)
     ]
   },
   {
@@ -92,18 +109,15 @@ export const boardConfigs: BoardConfig[] = [
     label: "Large Battle 32x32",
     size: 32,
     fleet: [
-      ship("Titan Carrier", 12),
-      ship("Super Battleship", 10),
-      ship("Heavy Cruiser Alpha", 9),
-      ship("Heavy Cruiser Beta", 8),
-      ship("Cruiser Alpha", 7),
-      ship("Cruiser Beta", 6),
-      ship("Submarine Alpha", 6),
-      ship("Submarine Beta", 5),
-      ship("Destroyer Alpha", 5),
-      ship("Destroyer Beta", 4),
-      ship("Patrol Boat", 3),
-      ship("Scout Boat", 2)
+      ...ships("Titan Carrier", 12),
+      ...ships("Super Battleship", 10),
+      ...ships("Heavy Cruiser", 8, 2),
+      ...ships("Cruiser", 6, 3),
+      ...ships("Submarine", 5, 3),
+      ...ships("Destroyer", 4, 4),
+      ...ships("Patrol Boat", 3, 4),
+      ...ships("Interceptor", 2, 6),
+      ...ships("Scout Boat", 1, 12)
     ]
   }
 ];
