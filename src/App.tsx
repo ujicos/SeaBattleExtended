@@ -5,7 +5,7 @@ import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { StatsPanel } from "./components/StatsPanel";
-import { canPlaceShip, getShipCells, placeShip, randomizeFleet } from "./game/board";
+import { allShipsSunk, canPlaceShip, getShipCells, placeShip, randomizeFleet, receiveShot } from "./game/board";
 import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { rafLoop } from "./game/animation";
@@ -22,7 +22,7 @@ import {
   type PlayerProfile,
   type PlayerStats
 } from "./services/storage";
-import type { Coordinate, GameSettings, Orientation, PeerIdentity } from "./types/game";
+import type { BoardState, Coordinate, GameSettings, GameState, Orientation, PeerIdentity, PlayerSide, ShotResult } from "./types/game";
 
 const guestIdentity: PeerIdentity = {
   playerId: "local_ai",
@@ -33,6 +33,25 @@ const guestIdentity: PeerIdentity = {
 
 function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): string | null {
   return getBoardConfig(settings.boardId).fleet.find((ship) => !placedIds.has(ship.id))?.id ?? null;
+}
+
+type MatchMode = "practice" | "p2p";
+type PeerRole = "host" | "guest" | null;
+
+interface ReadyPayload {
+  board: BoardState;
+}
+
+interface ShotPayload {
+  coord: Coordinate;
+}
+
+interface ShotResultPayload {
+  coord: Coordinate;
+  result: ShotResult;
+  shipId?: string;
+  nextTurn: "local" | "remote";
+  winner: "local" | "remote" | null;
 }
 
 function App() {
@@ -50,7 +69,16 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showOpponentStats, setShowOpponentStats] = useState(false);
   const [attackVisual, setAttackVisual] = useState<(AttackAnimation & { board: "local" | "remote" }) | null>(null);
+  const [matchMode, setMatchMode] = useState<MatchMode>("practice");
+  const [peerRole, setPeerRole] = useState<PeerRole>(null);
+  const [localReady, setLocalReady] = useState(false);
+  const [remoteReady, setRemoteReady] = useState(false);
+  const [remoteBoardReady, setRemoteBoardReady] = useState<BoardState | null>(null);
   const network = useRef<PeerGameClient | null>(null);
+  const gameRef = useRef(game);
+  const peerRoleRef = useRef<PeerRole>(null);
+  const opponentRef = useRef(opponent);
+  const remoteBoardReadyRef = useRef<BoardState | null>(null);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
   const selectedShip = config.fleet.find((ship) => ship.id === game.selectedShipId);
@@ -64,6 +92,22 @@ function App() {
           valid: canPlaceShip(game.localBoard, selectedShip, hovered, orientation, selectedShip.id)
         }
       : null;
+
+  useEffect(() => {
+    gameRef.current = game;
+  }, [game]);
+
+  useEffect(() => {
+    peerRoleRef.current = peerRole;
+  }, [peerRole]);
+
+  useEffect(() => {
+    opponentRef.current = opponent;
+  }, [opponent]);
+
+  useEffect(() => {
+    remoteBoardReadyRef.current = remoteBoardReady;
+  }, [remoteBoardReady]);
 
   function attackDirection(coord: Coordinate): AttackAnimation["direction"] {
     const top = coord.row;
@@ -159,6 +203,7 @@ function App() {
 
   function beginLocalBattle() {
     const remoteBoard = randomizeFleet(config);
+    setMatchMode("practice");
     setOpponent(guestIdentity);
     setGame((current) => startBattle(current, remoteBoard));
   }
@@ -180,7 +225,7 @@ function App() {
       endMatch("win", state);
       return;
     }
-    if (outcome.nextTurn === "remote") {
+    if (matchMode === "practice" && outcome.nextTurn === "remote") {
       window.setTimeout(() => remoteTurn(state), 450);
     }
   }
@@ -230,7 +275,49 @@ function App() {
     }
     const client = new PeerGameClient();
     network.current = client;
-    client.onStatus(setNetworkStatus);
+    setMatchMode("p2p");
+    setPeerRole("host");
+    setLocalReady(false);
+    setRemoteReady(false);
+    setRemoteBoardReady(null);
+    bindPeerClient(client);
+    client.onStatus((status) => {
+      setNetworkStatus(status);
+      if (status === "P2P data channel open") {
+        client.send("identity", makeIdentity(profile, stats));
+        client.send("settings", gameRef.current.settings);
+      }
+    });
+    const code = await client.createRoom(makeIdentity(profile, stats));
+    setRoomCode(code);
+    updateSettings(game.settings);
+    setActiveTab("play");
+  }
+
+  async function joinRoom() {
+    if (network.current) {
+      network.current.close();
+    }
+    const client = new PeerGameClient();
+    network.current = client;
+    setMatchMode("p2p");
+    setPeerRole("guest");
+    setLocalReady(false);
+    setRemoteReady(false);
+    setRemoteBoardReady(null);
+    bindPeerClient(client);
+    client.onStatus((status) => {
+      setNetworkStatus(status);
+      if (status === "P2P data channel open") {
+        client.send("identity", makeIdentity(profile, stats));
+      }
+    });
+    await client.joinRoom(joinCode, makeIdentity(profile, stats));
+    setRoomCode(joinCode.toUpperCase());
+    setActiveTab("play");
+  }
+
+  function bindPeerClient(client: PeerGameClient) {
     client.onMessage((message) => {
       if (message.type === "identity") {
         const remote = message.payload as PeerIdentity;
@@ -240,22 +327,117 @@ function App() {
           return;
         }
         setOpponent(remote);
+        return;
+      }
+
+      if (message.type === "settings") {
+        const settings = message.payload as GameSettings;
+        setGame((current) => resetBoards(current, settings));
+        setLocalReady(false);
+        setRemoteReady(false);
+        setRemoteBoardReady(null);
+        setActiveTab("play");
+        setNetworkStatus("Host settings received. Place your ships.");
+        return;
+      }
+
+      if (message.type === "ready") {
+        const payload = message.payload as ReadyPayload;
+        setRemoteBoardReady(payload.board);
+        setRemoteReady(true);
+        setGame((current) => ({ ...current, remoteBoard: payload.board }));
+        setNetworkStatus(peerRoleRef.current === "host" ? "Opponent ready. Start battle." : "Host is ready.");
+        return;
+      }
+
+      if (message.type === "start") {
+        setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
+        setNetworkStatus("Battle started. Host fires first.");
+        setActiveTab("play");
+        return;
+      }
+
+      if (message.type === "shot") {
+        receiveRemoteShot((message.payload as ShotPayload).coord);
+        return;
+      }
+
+      if (message.type === "shot-result") {
+        applyRemoteShotResult(message.payload as ShotResultPayload);
       }
     });
-    const code = await client.createRoom(makeIdentity(profile, stats));
-    setRoomCode(code);
-    client.send("identity", makeIdentity(profile, stats));
   }
 
-  async function joinRoom() {
-    if (network.current) {
-      network.current.close();
+  function markReady() {
+    if (!placementReady || matchMode !== "p2p") {
+      return;
     }
-    const client = new PeerGameClient();
-    network.current = client;
-    client.onStatus(setNetworkStatus);
-    await client.joinRoom(joinCode, makeIdentity(profile, stats));
-    client.send("identity", makeIdentity(profile, stats));
+    setLocalReady(true);
+    setNetworkStatus(remoteReady ? "Both fleets ready." : "Fleet ready. Waiting for opponent.");
+    network.current?.send("ready", { board: game.localBoard } satisfies ReadyPayload);
+  }
+
+  function startP2PBattle() {
+    if (peerRole !== "host" || !localReady || !remoteReady || !remoteBoardReady) {
+      return;
+    }
+    setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
+    network.current?.send("start", { startedAt: Date.now() });
+    setNetworkStatus("Battle started. Your turn.");
+    setActiveTab("play");
+  }
+
+  function receiveRemoteShot(coord: Coordinate) {
+    const current = gameRef.current;
+    const shot = receiveShot(current.localBoard, coord);
+    if (shot.result === "duplicate") {
+      return;
+    }
+    playAttackVisual("local", coord, shot.result);
+    const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
+    const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
+    const nextState: GameState = {
+      ...current,
+      localBoard: shot.board,
+      turn: winner ? "remote" : nextTurn,
+      winner,
+      phase: winner ? "defeat" : current.phase,
+      moves: current.moves + 1,
+      endedAt: winner ? performance.now() : current.endedAt,
+      log: [`remote ${shot.result.toUpperCase()} at ${coord.row + 1},${coord.col + 1}`, ...current.log].slice(0, 30)
+    };
+    setGame(nextState);
+    network.current?.send("shot-result", {
+      coord,
+      result: shot.result,
+      shipId: shot.shipId,
+      nextTurn,
+      winner
+    } satisfies ShotResultPayload);
+    if (winner) {
+      endMatch("loss", nextState);
+    }
+  }
+
+  function applyRemoteShotResult(payload: ShotResultPayload) {
+    setGame((current) => {
+      const shot = receiveShot(current.remoteBoard, payload.coord);
+      const nextWinner: PlayerSide | null = payload.winner === "local" ? "remote" : payload.winner === "remote" ? "local" : null;
+      const nextTurn: PlayerSide = payload.nextTurn === "local" ? "remote" : "local";
+      const phase = nextWinner === "local" ? "victory" : nextWinner === "remote" ? "defeat" : current.phase;
+      const nextState: GameState = {
+        ...current,
+        remoteBoard: shot.result === "duplicate" ? current.remoteBoard : shot.board,
+        turn: nextWinner ? current.turn : nextTurn,
+        winner: nextWinner,
+        phase,
+        endedAt: nextWinner ? performance.now() : current.endedAt
+      };
+      if (nextWinner === "local") {
+        endMatch("win", nextState);
+      }
+      return nextState;
+    });
   }
 
   return (
@@ -269,10 +451,18 @@ function App() {
           </div>
         </div>
         <div className="top-actions">
-          <div className="player-chip">
+          <button
+            className="player-chip"
+            type="button"
+            title="Open profile"
+            onClick={() => {
+              setActiveTab("profile");
+              setMenuOpen(false);
+            }}
+          >
             <UserRound size={18} />
             {profile.displayName}
-          </div>
+          </button>
           <button className="menu-button" type="button" title="Open menu" onClick={() => setMenuOpen((value) => !value)}>
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
@@ -280,7 +470,7 @@ function App() {
       </header>
 
       {menuOpen && (
-        <nav className="tabbar">
+        <nav className="tabbar menu-popover">
           {[
             ["play", Shield, "Play"],
             ["lobby", Radio, "Lobby"],
@@ -312,7 +502,7 @@ function App() {
             onRotate={() => setOrientation((value) => (value === "horizontal" ? "vertical" : "horizontal"))}
             onShuffle={shuffle}
             onStart={beginLocalBattle}
-            ready={placementReady}
+            ready={matchMode === "practice" && placementReady}
           />
           {game.phase === "menu" && (
             <section className="panel hero-panel">
@@ -351,6 +541,32 @@ function App() {
                 onCellHover={setHovered}
                 label="Your waters"
               />
+              {matchMode === "p2p" && (
+                <section className="panel p2p-ready-panel">
+                  <div className="section-title">
+                    <span>Multiplayer fleet</span>
+                    <small>{networkStatus}</small>
+                  </div>
+                  <div className="ready-grid">
+                    <div className={localReady ? "ready-pill ready" : "ready-pill"}>
+                      <small>Your fleet</small>
+                      <strong>{localReady ? "Ready" : `${game.localBoard.ships.length}/${config.fleet.length}`}</strong>
+                    </div>
+                    <div className={remoteReady ? "ready-pill ready" : "ready-pill"}>
+                      <small>{opponent.displayName}</small>
+                      <strong>{remoteReady ? "Ready" : "Waiting"}</strong>
+                    </div>
+                  </div>
+                  <button className="primary" type="button" disabled={!placementReady || localReady} onClick={markReady}>
+                    Confirm fleet
+                  </button>
+                  {peerRole === "host" && (
+                    <button className="secondary" type="button" disabled={!localReady || !remoteReady} onClick={startP2PBattle}>
+                      Start multiplayer battle
+                    </button>
+                  )}
+                </section>
+              )}
             </>
           )}
           {(game.phase === "battle" || game.phase === "victory" || game.phase === "defeat") && (

@@ -109,7 +109,15 @@ small,
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
+  color: #eef8f7;
+  cursor: pointer;
   white-space: nowrap;
+}
+
+.player-chip:hover,
+.menu-button:hover {
+  border-color: rgba(72, 208, 187, 0.55);
+  background: rgba(72, 208, 187, 0.1);
 }
 
 .top-actions {
@@ -125,6 +133,12 @@ small,
   border-radius: 14px;
   color: #eef8f7;
   background: rgba(255, 255, 255, 0.06);
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.menu-button:active,
+.player-chip:active {
+  transform: scale(0.97);
 }
 
 .tabbar {
@@ -139,6 +153,11 @@ small,
   margin: 0;
   padding: 6px;
   border-radius: 16px;
+}
+
+.menu-popover {
+  transform-origin: top right;
+  animation: menu-pop 180ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
 .tabbar button,
@@ -162,6 +181,16 @@ small,
   padding: 0 14px;
   background: transparent;
   color: #b9cecc;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.tabbar button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #eef8f7;
+}
+
+.tabbar button:active {
+  transform: translateX(2px) scale(0.98);
 }
 
 .tabbar button.active,
@@ -244,7 +273,8 @@ select {
 }
 
 .setup-grid,
-.stats-grid {
+.stats-grid,
+.ready-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -605,13 +635,28 @@ select {
 }
 
 .history-row,
-.opponent-card {
+.opponent-card,
+.ready-pill {
   display: grid;
   gap: 4px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.18);
+}
+
+.p2p-ready-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.ready-pill.ready {
+  border-color: rgba(72, 208, 187, 0.7);
+  background: rgba(72, 208, 187, 0.12);
+}
+
+.ready-pill strong {
+  font-size: 1.1rem;
 }
 
 .file-button {
@@ -679,6 +724,17 @@ select {
   100% {
     opacity: 0;
     transform: translateY(-10px) scale(1.25);
+  }
+}
+
+@keyframes menu-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

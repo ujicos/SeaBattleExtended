@@ -86,6 +86,7 @@ export interface NetworkMessage {
     | "ready"
     | "shot"
     | "shot-result"
+    | "start"
     | "timer"
     | "resync"
     | "game-over";

@@ -10,6 +10,7 @@ export class PeerGameClient {
   private listeners = new Set<Listener>();
   private statusListeners = new Set<StatusListener>();
   private seenMessages = new Set<string>();
+  private pendingMessages: NetworkMessage[] = [];
 
   constructor(
     private readonly signalingUrl =
@@ -40,17 +41,18 @@ export class PeerGameClient {
   }
 
   send(type: NetworkMessage["type"], payload: unknown): void {
-    if (this.channel?.readyState !== "open") {
-      this.emitStatus("P2P channel not ready yet");
-      return;
-    }
     const message: NetworkMessage = {
       type,
       payload,
       messageId: crypto.randomUUID(),
       sentAt: Date.now()
     };
-    this.channel?.send(JSON.stringify(message));
+    if (this.channel?.readyState !== "open") {
+      this.pendingMessages.push(message);
+      this.emitStatus("P2P channel opening");
+      return;
+    }
+    this.channel.send(JSON.stringify(message));
   }
 
   close(): void {
@@ -123,12 +125,27 @@ export class PeerGameClient {
 
   private bindChannel(channel: RTCDataChannel): void {
     this.channel = channel;
-    this.channel.onopen = () => this.emitStatus("P2P data channel open");
+    this.channel.onopen = () => {
+      this.emitStatus("P2P data channel open");
+      for (const message of this.pendingMessages.splice(0)) {
+        this.channel?.send(JSON.stringify(message));
+      }
+    };
     this.channel.onclose = () => this.emitStatus("P2P data channel closed");
     this.channel.onmessage = (event) => this.emitMessage(JSON.parse(event.data) as NetworkMessage);
   }
 
   private async handleSignal(signal: any): Promise<void> {
+    if (signal.type === "peer-joined" && signal.identity) {
+      this.emitMessage({
+        type: "identity",
+        payload: signal.identity,
+        messageId: crypto.randomUUID(),
+        sentAt: Date.now()
+      });
+      return;
+    }
+
     if (!this.peer) {
       return;
     }
