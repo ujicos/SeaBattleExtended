@@ -1,4 +1,4 @@
-import { Anchor, BarChart3, ChevronDown, Crown, Radio, Settings, Shield, Trophy, UserRound } from "lucide-react";
+import { Anchor, BarChart3, ChevronDown, Crown, Music2, Radio, Settings, Shield, Trophy, UserRound, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BoardGrid, isSunkBufferCoord } from "./components/BoardGrid";
 import type { AttackAnimation } from "./components/BoardGrid";
@@ -57,9 +57,11 @@ function makeShareLink(roomCode: string): string {
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
+type AudioMode = "on" | "music-muted" | "muted";
 const BOARD_SWITCH_DELAY_MS = 300;
 const BOARD_RETURN_DELAY_MS = 1200;
 const OPPONENT_SOUND_VOLUME = 0.45;
+const audioModeKey = "sea-battle.audio-mode";
 
 interface ReadyPayload {
   board: BoardState;
@@ -104,6 +106,7 @@ function App() {
   const [fleetPanelExpanded, setFleetPanelExpanded] = useState(false);
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
+  const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -292,6 +295,20 @@ function App() {
   useEffect(() => {
     saveStats(stats);
   }, [stats]);
+
+  useEffect(() => {
+    localStorage.setItem(audioModeKey, audioMode);
+    audio.setEffectsEnabled(audioMode !== "muted");
+    audio.setMusicEnabled(audioMode === "on");
+  }, [audioMode]);
+
+  useEffect(() => {
+    if (game.phase === "battle" && audioMode === "on") {
+      void audio.playTheme();
+      return;
+    }
+    audio.stopTheme();
+  }, [audioMode, game.phase]);
 
   useEffect(() => {
     if (activeTab === "lobby") {
@@ -902,6 +919,24 @@ function App() {
                   <BarChart3 size={18} />
                   Stats
                 </button>
+                <div className="audio-toggle" aria-label="Audio settings">
+                  {([
+                    ["on", Volume2, "All"],
+                    ["music-muted", Music2, "SFX"],
+                    ["muted", VolumeX, "Mute"]
+                  ] as const).map(([mode, Icon, label]) => (
+                    <button
+                      className={audioMode === mode ? "active" : ""}
+                      type="button"
+                      key={mode}
+                      title={mode === "on" ? "Music and effects on" : mode === "music-muted" ? "Mute music only" : "Mute music and effects"}
+                      onClick={() => setAudioMode(mode)}
+                    >
+                      <Icon size={16} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
               </section>
               {showOpponentStats && (
                 <section className="panel match-stats">

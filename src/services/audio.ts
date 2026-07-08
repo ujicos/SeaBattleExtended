@@ -1,17 +1,36 @@
 import { assets } from "./assets";
 
 export class AudioManager {
-  private enabled = true;
+  private effectsEnabled = true;
+  private musicEnabled = true;
   private context: AudioContext | null = null;
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly pendingBuffers = new Map<string, Promise<AudioBuffer | null>>();
+  private musicSource: AudioBufferSourceNode | null = null;
+  private musicGain: GainNode | null = null;
 
   setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
+    this.effectsEnabled = enabled;
+    this.setMusicEnabled(enabled);
+  }
+
+  setEffectsEnabled(enabled: boolean): void {
+    this.effectsEnabled = enabled;
+  }
+
+  setMusicEnabled(enabled: boolean): void {
+    this.musicEnabled = enabled;
+    if (!enabled) {
+      this.stopTheme();
+      return;
+    }
+    if (this.musicGain) {
+      this.musicGain.gain.value = 0.26;
+    }
   }
 
   play(key: string, volume = 1): void {
-    if (!this.enabled) {
+    if (!this.effectsEnabled) {
       return;
     }
     if (key === "turn") {
@@ -72,7 +91,7 @@ export class AudioManager {
   private async playBuffer(key: string, volume: number): Promise<void> {
     const context = await this.getContext();
     const buffer = await this.loadBuffer(key);
-    if (!context || !buffer || !this.enabled) {
+    if (!context || !buffer || !this.effectsEnabled) {
       return;
     }
 
@@ -83,6 +102,45 @@ export class AudioManager {
     source.connect(gain);
     gain.connect(context.destination);
     source.start();
+  }
+
+  async playTheme(volume = 0.26): Promise<void> {
+    if (!this.musicEnabled || this.musicSource) {
+      return;
+    }
+    const context = await this.getContext();
+    const buffer = await this.loadBuffer("theme");
+    if (!context || !buffer || !this.musicEnabled || this.musicSource) {
+      return;
+    }
+
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    source.loop = true;
+    gain.gain.value = Math.max(0, Math.min(1, volume));
+    source.connect(gain);
+    gain.connect(context.destination);
+    source.onended = () => {
+      if (this.musicSource === source) {
+        this.musicSource = null;
+        this.musicGain = null;
+      }
+    };
+    this.musicSource = source;
+    this.musicGain = gain;
+    source.start();
+  }
+
+  stopTheme(): void {
+    const source = this.musicSource;
+    this.musicSource = null;
+    this.musicGain = null;
+    try {
+      source?.stop();
+    } catch {
+      // Already stopped.
+    }
   }
 
   private playTurnCue(volume: number): void {

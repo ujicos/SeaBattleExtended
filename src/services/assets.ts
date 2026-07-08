@@ -1,6 +1,7 @@
 import bomberFlybyUrl from "../assets/audio/bomber_flyby.mp3";
 import defeatUrl from "../assets/audio/defeat.mp3";
 import explodeUrl from "../assets/audio/explode.mp3";
+import themeUrl from "../assets/audio/theme.mp3";
 import victoryUrl from "../assets/audio/victory.mp3";
 import waterMissUrl from "../assets/audio/water_miss.mp3";
 import whizzHitUrl from "../assets/audio/whizz_hit.mp3";
@@ -18,6 +19,7 @@ export const assetManifest: AssetEntry[] = [
   { key: "hit", kind: "audio", path: explodeUrl, description: "Successful ship hit explosion" },
   { key: "whizz-hit", kind: "audio", path: whizzHitUrl, description: "Projectile whizz on successful hit" },
   { key: "miss", kind: "audio", path: waterMissUrl, description: "Water splash miss" },
+  { key: "theme", kind: "audio", path: themeUrl, description: "Optional battle theme music" },
   { key: "victory", kind: "audio", path: victoryUrl, description: "Victory sting" },
   { key: "defeat", kind: "audio", path: defeatUrl, description: "Defeat sting" },
   { key: "water", kind: "texture", path: "/assets/textures/water.png", description: "Board water texture" },

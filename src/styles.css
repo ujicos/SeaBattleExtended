@@ -927,6 +927,41 @@ select {
   padding: 0 12px;
 }
 
+.audio-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-width: min(260px, 100%);
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.audio-toggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #bed7d3;
+  background: transparent;
+  cursor: pointer;
+}
+
+.audio-toggle button.active {
+  color: #041615;
+  background: var(--accent);
+}
+
+.audio-toggle span {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .match-stats {
   grid-column: 1 / -1;
 }
@@ -935,7 +970,7 @@ select {
   min-height: 66px;
 }
 
-.battle-status div {
+.battle-status > div:not(.audio-toggle) {
   display: grid;
 }
 
