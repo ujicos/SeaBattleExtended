@@ -105,18 +105,18 @@ export const boardConfigs: BoardConfig[] = [
     ]
   },
   {
-    id: "extended-24",
-    label: "Large Battle 24x24",
-    size: 24,
+    id: "extended-20",
+    label: "Large Battle 20x20",
+    size: 20,
     fleet: [
-      ...ships("Titan Carrier", 9),
-      ...ships("Super Battleship", 8),
+      ...ships("Titan Carrier", 8),
+      ...ships("Super Battleship", 7),
       ...ships("Heavy Cruiser", 6, 2),
-      ...ships("Cruiser", 5, 3),
+      ...ships("Cruiser", 5, 2),
       ...ships("Submarine", 4, 3),
       ...ships("Destroyer", 3, 4),
-      ...ships("Patrol Boat", 2, 5),
-      ...ships("Scout Boat", 1, 10)
+      ...ships("Patrol Boat", 2, 4),
+      ...ships("Scout Boat", 1, 8)
     ]
   }
 ];
@@ -138,5 +138,6 @@ export const defaultSettings: GameSettings = {
 };
 
 export function getBoardConfig(boardId: string): BoardConfig {
-  return boardConfigs.find((board) => board.id === boardId) ?? boardConfigs[0];
+  const normalizedBoardId = boardId === "extended-24" ? "extended-20" : boardId;
+  return boardConfigs.find((board) => board.id === normalizedBoardId) ?? boardConfigs[0];
 }

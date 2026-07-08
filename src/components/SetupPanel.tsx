@@ -27,51 +27,41 @@ export function SetupPanel({ settings, orientation, onSettings, onRotate, onShuf
           ))}
         </select>
       </label>
-      <div className="segmented">
-        {(["classic", "extended"] as const).map((mode) => (
-          <button
-            className={settings.mode === mode ? "active" : ""}
-            type="button"
-            key={mode}
-            onClick={() => onSettings({ ...settings, mode })}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={settings.blitz.enabled}
-          onChange={(event) => onSettings({ ...settings, blitz: { ...settings.blitz, enabled: event.target.checked } })}
-        />
-        <TimerReset size={18} />
-        Blitz mode
-      </label>
-      {settings.blitz.enabled && (
-        <div className="setup-grid">
-          <label className="field">
-            Turn timer
-            <select
-              value={settings.blitz.seconds}
-              onChange={(event) => onSettings({ ...settings, blitz: { ...settings.blitz, seconds: Number(event.target.value) as 5 | 10 | 15 | 30 } })}
-            >
-              {[5, 10, 15, 30].map((seconds) => <option key={seconds}>{seconds}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            Timeout
-            <select
-              value={settings.blitz.timeoutAction}
-              onChange={(event) => onSettings({ ...settings, blitz: { ...settings.blitz, timeoutAction: event.target.value as "lose-turn" | "lose-match" } })}
-            >
-              <option value="lose-turn">Lose turn</option>
-              <option value="lose-match">Lose match</option>
-            </select>
-          </label>
-        </div>
-      )}
       <div className="modifier-grid">
+        <label className="toggle modifier-toggle">
+          <input
+            type="checkbox"
+            checked={settings.blitz.enabled}
+            onChange={(event) => onSettings({ ...settings, blitz: { ...settings.blitz, enabled: event.target.checked } })}
+          />
+          <span>
+            <strong>Blitz Mode</strong>
+            <small>Timed turns with configurable timeout rules.</small>
+          </span>
+        </label>
+        {settings.blitz.enabled && (
+          <div className="setup-grid modifier-options">
+            <label className="field">
+              Turn timer
+              <select
+                value={settings.blitz.seconds}
+                onChange={(event) => onSettings({ ...settings, blitz: { ...settings.blitz, seconds: Number(event.target.value) as 5 | 10 | 15 | 30 } })}
+              >
+                {[5, 10, 15, 30].map((seconds) => <option key={seconds}>{seconds}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              Timeout
+              <select
+                value={settings.blitz.timeoutAction}
+                onChange={(event) => onSettings({ ...settings, blitz: { ...settings.blitz, timeoutAction: event.target.value as "lose-turn" | "lose-match" } })}
+              >
+                <option value="lose-turn">Lose turn</option>
+                <option value="lose-match">Lose match</option>
+              </select>
+            </label>
+          </div>
+        )}
         <label className="toggle modifier-toggle">
           <input
             type="checkbox"

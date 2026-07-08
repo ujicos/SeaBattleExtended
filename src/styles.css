@@ -414,6 +414,11 @@ select {
   color: #a9bfbc;
 }
 
+.modifier-options {
+  margin-top: -2px;
+  padding: 0 10px 10px;
+}
+
 .ship-list {
   display: grid;
   gap: 8px;
