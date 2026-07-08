@@ -28,6 +28,9 @@ export interface PlayerStats {
   totalShots: number;
   hits: number;
   shipsDestroyed: number;
+  xp: number;
+  lifetimeXp: number;
+  prestige: number;
   fastestWinMs: number | null;
   longestGameMs: number | null;
   opponents: Record<
@@ -55,17 +58,80 @@ const defaultStats: PlayerStats = {
   totalShots: 0,
   hits: 0,
   shipsDestroyed: 0,
+  xp: 0,
+  lifetimeXp: 0,
+  prestige: 0,
   fastestWinMs: null,
   longestGameMs: null,
   opponents: {},
   history: []
 };
 
+export const maxRank = 55;
+
+export const xpAwards = {
+  shot: 5,
+  hit: 20,
+  sunk: 60,
+  win: 350,
+  loss: 90
+} as const;
+
 export function makeEmptyStats(): PlayerStats {
   return {
     ...defaultStats,
     opponents: {},
     history: []
+  };
+}
+
+export function xpForRank(rank: number): number {
+  if (rank <= 1) {
+    return 0;
+  }
+  const capped = Math.min(rank, maxRank);
+  return Math.round((capped - 1) * 180 + (capped - 1) ** 2 * 28);
+}
+
+export function getRankProgress(xp: number): { rank: number; currentXp: number; nextXp: number; progress: number } {
+  for (let rank = 1; rank < maxRank; rank += 1) {
+    const nextXp = xpForRank(rank + 1);
+    if (xp < nextXp) {
+      const currentXp = xpForRank(rank);
+      return {
+        rank,
+        currentXp,
+        nextXp,
+        progress: Math.max(0, Math.min(1, (xp - currentXp) / (nextXp - currentXp)))
+      };
+    }
+  }
+
+  return {
+    rank: maxRank,
+    currentXp: xpForRank(maxRank),
+    nextXp: xpForRank(maxRank),
+    progress: 1
+  };
+}
+
+export function awardXp(stats: PlayerStats, amount: number): PlayerStats {
+  const xp = Math.max(0, Math.round(amount));
+  return {
+    ...stats,
+    xp: stats.xp + xp,
+    lifetimeXp: stats.lifetimeXp + xp
+  };
+}
+
+export function prestigeStats(stats: PlayerStats): PlayerStats {
+  if (getRankProgress(stats.xp).rank < maxRank) {
+    return stats;
+  }
+  return {
+    ...stats,
+    xp: 0,
+    prestige: stats.prestige + 1
   };
 }
 
@@ -105,7 +171,16 @@ export function saveProfile(profile: PlayerProfile): void {
 }
 
 export function loadStats(): PlayerStats {
-  return safeParse<PlayerStats>(localStorage.getItem(statsKey), defaultStats);
+  const loaded = safeParse<Partial<PlayerStats>>(localStorage.getItem(statsKey), defaultStats);
+  return {
+    ...defaultStats,
+    ...loaded,
+    xp: loaded.xp ?? 0,
+    lifetimeXp: loaded.lifetimeXp ?? loaded.xp ?? 0,
+    prestige: loaded.prestige ?? 0,
+    opponents: loaded.opponents ?? {},
+    history: loaded.history ?? []
+  };
 }
 
 export function saveStats(stats: PlayerStats): void {
@@ -139,15 +214,17 @@ export function recordMatch(stats: PlayerStats, record: MatchRecord): PlayerStat
     losses: 0
   };
 
+  const withMatchXp = awardXp(stats, won ? xpAwards.win : xpAwards.loss);
+
   return {
-    ...stats,
-    totalGames: stats.totalGames + 1,
-    wins: stats.wins + (won ? 1 : 0),
-    losses: stats.losses + (won ? 0 : 1),
-    fastestWinMs: won ? Math.min(stats.fastestWinMs ?? record.durationMs, record.durationMs) : stats.fastestWinMs,
-    longestGameMs: Math.max(stats.longestGameMs ?? record.durationMs, record.durationMs),
+    ...withMatchXp,
+    totalGames: withMatchXp.totalGames + 1,
+    wins: withMatchXp.wins + (won ? 1 : 0),
+    losses: withMatchXp.losses + (won ? 0 : 1),
+    fastestWinMs: won ? Math.min(withMatchXp.fastestWinMs ?? record.durationMs, record.durationMs) : withMatchXp.fastestWinMs,
+    longestGameMs: Math.max(withMatchXp.longestGameMs ?? record.durationMs, record.durationMs),
     opponents: {
-      ...stats.opponents,
+      ...withMatchXp.opponents,
       [record.opponent.playerId]: {
         displayName: record.opponent.displayName,
         games: opponent.games + 1,

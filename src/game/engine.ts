@@ -1,5 +1,5 @@
 import { defaultSettings, getBoardConfig } from "./config";
-import { allShipsSunk, makeBoard, receiveShot } from "./board";
+import { allShipsSunk, makeBoard, randomizeFleet, receiveShot } from "./board";
 import type { BoardState, Coordinate, GameSettings, GameState, PlayerSide, ShotOutcome } from "../types/game";
 
 export function createInitialGame(settings: GameSettings = defaultSettings): GameState {
@@ -7,10 +7,10 @@ export function createInitialGame(settings: GameSettings = defaultSettings): Gam
   return {
     phase: "menu",
     settings,
-    localBoard: makeBoard(config),
+    localBoard: randomizeFleet(config),
     remoteBoard: makeBoard(config),
     turn: "local",
-    selectedShipId: config.fleet[0]?.id ?? null,
+    selectedShipId: null,
     winner: null,
     moves: 0,
     startedAt: null,
@@ -25,9 +25,9 @@ export function resetBoards(state: GameState, settings: GameSettings): GameState
     ...state,
     settings,
     phase: "placing",
-    localBoard: makeBoard(config),
+    localBoard: randomizeFleet(config),
     remoteBoard: makeBoard(config),
-    selectedShipId: config.fleet[0]?.id ?? null,
+    selectedShipId: null,
     winner: null,
     moves: 0,
     startedAt: null,

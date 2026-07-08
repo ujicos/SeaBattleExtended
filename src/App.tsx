@@ -16,10 +16,13 @@ import {
   loadStats,
   makeIdentity,
   makeEmptyStats,
+  awardXp,
+  prestigeStats,
   recordMatch,
   removeMatch,
   saveProfile,
   saveStats,
+  xpAwards,
   type PlayerProfile,
   type PlayerStats
 } from "./services/storage";
@@ -71,6 +74,19 @@ function pickOpenShot(board: BoardState): Coordinate | null {
   }
 
   return picked;
+}
+
+function xpForShot(result: ShotResult): number {
+  if (result === "sunk") {
+    return xpAwards.shot + xpAwards.hit + xpAwards.sunk;
+  }
+  if (result === "hit") {
+    return xpAwards.shot + xpAwards.hit;
+  }
+  if (result === "miss") {
+    return xpAwards.shot;
+  }
+  return 0;
 }
 
 type MatchMode = "practice" | "p2p";
@@ -410,12 +426,14 @@ function App() {
     if (placedShip) {
       const nextOrientation = placedShip.orientation === "horizontal" ? "vertical" : "horizontal";
       if (canPlaceShip(game.localBoard, placedShip, placedShip.origin, nextOrientation, placedShip.id)) {
+        setOrientation(nextOrientation);
         setGame((current) => ({
           ...current,
           localBoard: placeShip(current.localBoard, placedShip, placedShip.origin, nextOrientation),
           selectedShipId: placedShip.id
         }));
       } else {
+        setOrientation(placedShip.orientation);
         setGame((current) => ({ ...current, selectedShipId: placedShip.id }));
       }
       return;
@@ -510,7 +528,17 @@ function App() {
     playAttackVisual("remote", coord, outcome.result);
     playShotResultSound(outcome.result);
     setGameAfterImpact(state, game.turn);
-    setStats((current) => ({ ...current, totalShots: current.totalShots + 1, hits: current.hits + (outcome.result === "miss" ? 0 : 1), shipsDestroyed: current.shipsDestroyed + (outcome.result === "sunk" ? 1 : 0) }));
+    setStats((current) =>
+      awardXp(
+        {
+          ...current,
+          totalShots: current.totalShots + 1,
+          hits: current.hits + (outcome.result === "miss" ? 0 : 1),
+          shipsDestroyed: current.shipsDestroyed + (outcome.result === "sunk" ? 1 : 0)
+        },
+        xpForShot(outcome.result)
+      )
+    );
     network.current?.send("shot", { coord } satisfies ShotPayload);
     if (outcome.winner) {
       endMatch("win", state);
@@ -1175,6 +1203,7 @@ function App() {
           stats={stats}
           onRemoveMatch={(matchId) => setStats((current) => removeMatch(current, matchId))}
           onResetStats={() => setStats(makeEmptyStats())}
+          onPrestige={() => setStats((current) => prestigeStats(current))}
         />
       )}
       {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}

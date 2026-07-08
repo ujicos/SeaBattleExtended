@@ -1102,6 +1102,45 @@ select {
   font-size: 1.4rem;
 }
 
+.rank-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid rgba(72, 208, 187, 0.34);
+  border-radius: 14px;
+  background: rgba(72, 208, 187, 0.08);
+}
+
+.rank-panel strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.4rem;
+}
+
+.xp-bar {
+  overflow: hidden;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.xp-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.prestige-button {
+  width: min(220px, 100%);
+}
+
+.prestige-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
 .history {
   display: grid;
   gap: 8px;
