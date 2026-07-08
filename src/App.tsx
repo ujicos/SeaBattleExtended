@@ -140,10 +140,6 @@ function formatNetworkStatus(status: string): string {
   return status;
 }
 
-function animateWaitingText(text: string, waitingLabel: string): string {
-  return text.replace(/Waiting(?:\.\.\.|\.\.|\.)?/g, waitingLabel);
-}
-
 function getPresenceSessionId(): string {
   const stored = localStorage.getItem(presenceSessionKey);
   if (stored) {
@@ -281,7 +277,6 @@ function App() {
   const shareLink = useMemo(() => makeShareLink(roomCode), [roomCode]);
   const lobbyOpponent = opponent.playerId === guestIdentity.playerId ? waitingIdentity : opponent;
   const waitingLabel = waitingFrames[waitingFrame];
-  const consoleStatus = useMemo(() => animateWaitingText(networkStatus, waitingLabel), [networkStatus, waitingLabel]);
   const leadingSide: "local" | "remote" | null =
     enemyShipsSunk === localShipsSunk ? null : enemyShipsSunk > localShipsSunk ? "local" : "remote";
   const battleLeadLabel = leadingSide === "local" ? profile.displayName : leadingSide === "remote" ? opponent.displayName : "tied";
@@ -1484,7 +1479,7 @@ function App() {
                 <section className="panel p2p-ready-panel">
                   <div className="section-title">
                     <span>Multiplayer fleet</span>
-                    <small className="console-status">{consoleStatus}</small>
+                    <small className="console-status">{networkStatus}</small>
                   </div>
                   {roomCode && (
                     <div className="setup-room-code">
@@ -1673,7 +1668,7 @@ function App() {
           <section className="panel lobby-actions-panel">
             <div className="section-title">
               <span>P2P Lobby</span>
-              <small className="console-status">{consoleStatus}</small>
+              <small className="console-status">{networkStatus}</small>
             </div>
             <button className="primary" type="button" onClick={() => void createRoom()}>Create Game</button>
             {roomCode && <div className="room-code">{roomCode}</div>}
@@ -1724,7 +1719,7 @@ function App() {
             </div>
             <div className="opponent-card">
               <strong>{lobbyOpponent.playerId === waitingIdentity.playerId ? `${waitingLabel} for opponent` : lobbyOpponent.displayName}</strong>
-              <span>{lobbyOpponent.playerId === waitingIdentity.playerId ? consoleStatus : `${lobbyOpponent.statsSummary.games} games · ${lobbyOpponent.statsSummary.winRate}% win rate`}</span>
+              <span>{lobbyOpponent.playerId === waitingIdentity.playerId ? networkStatus : `${lobbyOpponent.statsSummary.games} games · ${lobbyOpponent.statsSummary.winRate}% win rate`}</span>
             </div>
           </section>
         </div>
