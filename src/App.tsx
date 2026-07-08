@@ -1045,7 +1045,6 @@ function App() {
           <section className="panel lobby-actions-panel">
             <div className="section-title">
               <span>P2P Lobby</span>
-              <small>{networkStatus}</small>
             </div>
             <button className="primary" type="button" onClick={() => void createRoom()}>Create Game</button>
             {roomCode && <div className="room-code">{roomCode}</div>}

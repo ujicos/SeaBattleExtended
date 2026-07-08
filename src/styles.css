@@ -1292,8 +1292,11 @@ select {
 
   .tabbar button {
     display: flex;
+    align-items: center;
+    justify-content: center;
     min-height: 54px;
     gap: 8px;
+    padding: 0 22px;
   }
 
   .tabbar span {
