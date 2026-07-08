@@ -202,6 +202,7 @@ interface ShotPayload {
 interface ShotResultPayload {
   coord: Coordinate;
   result: ShotResult;
+  board?: BoardState;
   shipId?: string;
   nextTurn: "local" | "remote";
   winner: "local" | "remote" | null;
@@ -254,6 +255,8 @@ function App() {
   const peerRoleRef = useRef<PeerRole>(null);
   const opponentRef = useRef(opponent);
   const remoteBoardReadyRef = useRef<BoardState | null>(null);
+  const localShieldRef = useRef(localShield);
+  const remoteShieldRef = useRef(remoteShield);
   const boardSwitchTimer = useRef<number | null>(null);
   const boardReturnTimer = useRef<number | null>(null);
   const copyNoticeTimer = useRef<number | null>(null);
@@ -310,6 +313,14 @@ function App() {
   useEffect(() => {
     remoteBoardReadyRef.current = remoteBoardReady;
   }, [remoteBoardReady]);
+
+  useEffect(() => {
+    localShieldRef.current = localShield;
+  }, [localShield]);
+
+  useEffect(() => {
+    remoteShieldRef.current = remoteShield;
+  }, [remoteShield]);
 
   useEffect(() => {
     const shouldAnimateWaiting = matchMode === "p2p" && game.phase === "placing" && (!remoteReady || /Waiting/.test(networkStatus));
@@ -1213,7 +1224,7 @@ function App() {
     const treasure = findTreasureAt(current.localBoard, coord);
     if (treasure) {
       const board = markTreasureShot(current.localBoard, coord);
-      const nextRemoteShield = treasure === "shield" ? remoteShield + 1 : remoteShield;
+      const nextRemoteShield = treasure === "shield" ? remoteShieldRef.current + 1 : remoteShieldRef.current;
       if (treasure === "shield") {
         setRemoteShield(nextRemoteShield);
       }
@@ -1231,6 +1242,7 @@ function App() {
       network.current?.send("shot-result", {
         coord,
         result: "miss",
+        board,
         nextTurn: "local",
         winner: null,
         attackerShield: nextRemoteShield,
@@ -1240,9 +1252,9 @@ function App() {
       return;
     }
 
-    const shieldedShip = localShield > 0 ? findShipAt(current.localBoard, coord) : undefined;
+    const shieldedShip = localShieldRef.current > 0 ? findShipAt(current.localBoard, coord) : undefined;
     if (shieldedShip) {
-      const nextLocalShield = Math.max(0, localShield - 1);
+      const nextLocalShield = Math.max(0, localShieldRef.current - 1);
       setLocalShield(nextLocalShield);
       showEventToast("Your shield blocked a hit.");
       const board = markShieldedShot(current.localBoard, coord);
@@ -1260,6 +1272,7 @@ function App() {
       network.current?.send("shot-result", {
         coord,
         result: "shielded",
+        board,
         nextTurn: "local",
         winner: null,
         defenderShield: nextLocalShield
@@ -1291,10 +1304,11 @@ function App() {
     network.current?.send("shot-result", {
       coord,
       result: shot.result,
+      board: shot.board,
       shipId: shot.shipId,
       nextTurn,
       winner,
-      defenderShield: localShield
+      defenderShield: localShieldRef.current
     } satisfies ShotResultPayload);
     if (winner) {
       endMatch("loss", nextState);
@@ -1332,6 +1346,7 @@ function App() {
     }
     setGame((current) => {
       const shot =
+        payload.board ? { board: payload.board, result: payload.result } :
         payload.treasureKind ? { board: markTreasureShot(current.remoteBoard, payload.coord), result: "miss" as ShotResult } :
         payload.result === "shielded" ? { board: markShieldedShot(current.remoteBoard, payload.coord), result: "shielded" as ShotResult } :
         receiveShot(current.remoteBoard, payload.coord);
