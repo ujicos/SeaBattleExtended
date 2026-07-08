@@ -91,6 +91,10 @@ button {
   min-width: 0;
 }
 
+.brand > div {
+  min-width: 0;
+}
+
 .brand-button {
   border: 0;
   padding: 0;
@@ -120,6 +124,14 @@ button {
   align-items: center;
   gap: 7px;
   min-width: 0;
+}
+
+.brand-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .version-badge {
@@ -1606,17 +1618,41 @@ select {
     gap: 10px;
   }
 
+  .brand {
+    flex: 1 1 auto;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .brand svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand strong {
+    gap: 5px;
+    width: 100%;
+    font-size: clamp(0.68rem, 3.3vw, 0.92rem);
+  }
+
+  .brand-title {
+    flex: 1 1 auto;
+  }
+
+  .version-badge {
+    padding: 2px 5px;
+    font-size: 0.62rem;
+  }
+
   .top-actions {
+    flex: 0 0 auto;
     align-items: center;
+    gap: 6px;
   }
 
   .brand small,
   .player-chip {
     font-size: 0.78rem;
-  }
-
-  .brand strong {
-    font-size: 0.92rem;
   }
 
   .brand small {

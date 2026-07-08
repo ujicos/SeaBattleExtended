@@ -1394,7 +1394,7 @@ function App() {
           <Anchor />
           <div>
             <strong>
-              Sea Battle Extended
+              <span className="brand-title">Sea Battle Extended</span>
               <span className="version-badge">{appVersion?.commit ? `v${appVersion.commit.slice(0, 7)}` : "local"}</span>
             </strong>
             <small>WebRTC fleet battles</small>
