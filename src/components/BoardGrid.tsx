@@ -23,6 +23,7 @@ interface BoardGridProps {
   preview?: { cells: Coordinate[]; valid: boolean } | null;
   attackAnimation?: AttackAnimation | null;
   fogActive?: boolean;
+  chaosActive?: boolean;
   stormPhase?: "clear" | "warning" | "wave";
   compact?: boolean;
   label: string;
@@ -101,6 +102,7 @@ export const BoardGrid = memo(function BoardGrid({
   preview,
   attackAnimation,
   fogActive = false,
+  chaosActive = false,
   stormPhase = "clear",
   compact = false,
   label,
@@ -202,7 +204,7 @@ export const BoardGrid = memo(function BoardGrid({
       )}
       {showGrid && (
         <div
-          className={`board-grid${fogActive ? " fog-active" : ""}${stormPhase !== "clear" ? ` storm-${stormPhase}` : ""}`}
+          className={`board-grid${fogActive ? " fog-active" : ""}${chaosActive ? " rum-fog-active" : ""}${stormPhase !== "clear" ? ` storm-${stormPhase}` : ""}`}
           style={{ "--board-size": board.size } as React.CSSProperties}
           onPointerMove={handleTouchMove}
           onPointerUp={handleTouchEnd}
@@ -230,6 +232,7 @@ export const BoardGrid = memo(function BoardGrid({
             </div>
           )}
           {fogActive && <div className="fog-tide" aria-hidden="true" />}
+          {chaosActive && <div className="rum-fog" aria-hidden="true" />}
           {stormPhase !== "clear" && <div className="storm-front" aria-hidden="true" />}
           {cells.map((coord) => {
             const key = coordKey(coord);
@@ -262,6 +265,7 @@ export const BoardGrid = memo(function BoardGrid({
                 }}
               >
                 {value === "miss" && <Waves size={13} />}
+                {value === "shielded" && <span className="shield-mark" />}
                 {showShipSprite && ship && (
                   <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
                 )}

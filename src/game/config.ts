@@ -131,7 +131,9 @@ export const defaultSettings: GameSettings = {
   },
   modifiers: {
     fogTide: false,
-    stormMode: false
+    stormMode: false,
+    treasureTiles: false,
+    pirateChaos: false
   }
 };
 

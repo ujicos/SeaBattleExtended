@@ -449,11 +449,21 @@ select {
 }
 
 .fog-tide,
+.rum-fog,
 .storm-front {
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
+}
+
+.rum-fog {
+  opacity: 0.34;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(242, 198, 109, 0.16), transparent 24%),
+    radial-gradient(circle at 82% 42%, rgba(255, 101, 124, 0.12), transparent 26%),
+    linear-gradient(120deg, transparent 0 18%, rgba(242, 198, 109, 0.14) 28%, transparent 42% 62%, rgba(72, 208, 187, 0.1) 72%, transparent 88%);
+  animation: rum-fog-drift 5.5s ease-in-out infinite alternate;
 }
 
 .fog-tide {
@@ -532,9 +542,22 @@ select {
   background: #0c344f;
 }
 
+.cell-shielded {
+  color: var(--accent-2);
+  background: #173c4b;
+}
+
 .cell-hit,
 .cell-sunk {
   background: #5c1d29;
+}
+
+.shield-mark {
+  width: 38%;
+  aspect-ratio: 1;
+  border: 2px solid currentColor;
+  border-radius: 50% 50% 45% 45%;
+  box-shadow: 0 0 12px rgba(242, 198, 109, 0.38);
 }
 
 .cell-sunk {
@@ -1412,7 +1435,8 @@ select {
   pointer-events: none;
 }
 
-.achievement-toast {
+.achievement-toast,
+.event-toast {
   position: fixed;
   left: 50%;
   bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px));
@@ -1429,6 +1453,10 @@ select {
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
   transform: translateX(-50%);
   animation: achievement-toast-pop 2600ms ease forwards;
+}
+
+.event-toast {
+  border-color: rgba(242, 198, 109, 0.5);
 }
 
 .achievement-toast small {
@@ -1681,6 +1709,15 @@ select {
   }
   to {
     transform: translate3d(4%, 1%, 0);
+  }
+}
+
+@keyframes rum-fog-drift {
+  from {
+    transform: translate3d(3%, -1%, 0) skewX(-1deg);
+  }
+  to {
+    transform: translate3d(-3%, 1%, 0) skewX(1deg);
   }
 }
 

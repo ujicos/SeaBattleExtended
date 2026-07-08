@@ -2,7 +2,8 @@ export type PlayerSide = "local" | "remote";
 export type Orientation = "horizontal" | "vertical";
 export type CellState = "empty" | "ship" | "miss" | "hit" | "sunk";
 export type Phase = "menu" | "setup" | "placing" | "lobby" | "battle" | "victory" | "defeat";
-export type ShotResult = "miss" | "hit" | "sunk" | "duplicate" | "invalid";
+export type ShotResult = "miss" | "hit" | "sunk" | "shielded" | "duplicate" | "invalid";
+export type TreasureKind = "shield" | "fake";
 
 export interface Coordinate {
   row: number;
@@ -38,6 +39,8 @@ export interface BlitzConfig {
 export interface ModifierSettings {
   fogTide: boolean;
   stormMode: boolean;
+  treasureTiles: boolean;
+  pirateChaos: boolean;
 }
 
 export interface GameSettings {
@@ -51,6 +54,8 @@ export interface BoardState {
   size: number;
   ships: PlacedShip[];
   shots: Record<string, ShotResult>;
+  treasures: Record<string, TreasureKind>;
+  treasureHits: Record<string, true>;
 }
 
 export interface GameState {

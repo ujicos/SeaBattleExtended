@@ -6,9 +6,9 @@ import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { StatsPanel } from "./components/StatsPanel";
-import { allShipsSunk, canPlaceShip, coordKey, findShipAt, getShipCells, isShipSunk, placeShip, randomizeFleet, receiveShot } from "./game/board";
+import { allShipsSunk, canPlaceShip, coordKey, findShipAt, findTreasureAt, getShipCells, hasBlockingShot, isShipSunk, markShieldedShot, markTreasureShot, placeShip, receiveShot } from "./game/board";
 import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
-import { attack, createInitialGame, resetBoards, startBattle } from "./game/engine";
+import { attack, createBoardForSettings, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { assets } from "./services/assets";
 import { audio } from "./services/audio";
 import { listOpenLobbies, PeerGameClient, type LobbySummary } from "./services/network";
@@ -98,7 +98,9 @@ function normalizeSettings(settings: GameSettings): GameSettings {
     ...settings,
     modifiers: {
       fogTide: settings.modifiers?.fogTide ?? false,
-      stormMode: settings.modifiers?.stormMode ?? false
+      stormMode: settings.modifiers?.stormMode ?? false,
+      treasureTiles: settings.modifiers?.treasureTiles ?? false,
+      pirateChaos: settings.modifiers?.pirateChaos ?? false
     }
   };
 }
@@ -135,7 +137,7 @@ type StormPhase = "clear" | "warning" | "wave";
 type AudioMode = "on" | "music-muted" | "muted";
 const BOARD_SWITCH_DELAY_MS = 300;
 const BOARD_RETURN_DELAY_MS = 1200;
-const OPPONENT_SOUND_VOLUME = 0.45;
+const OPPONENT_SOUND_VOLUME = 0.28;
 const audioModeKey = "sea-battle.audio-mode";
 
 interface ReadyPayload {
@@ -152,6 +154,10 @@ interface ShotResultPayload {
   shipId?: string;
   nextTurn: "local" | "remote";
   winner: "local" | "remote" | null;
+  attackerShield?: number;
+  defenderShield?: number;
+  treasureKind?: "shield" | "fake";
+  chaosMessage?: string;
 }
 
 interface StormBoardPayload {
@@ -182,8 +188,11 @@ function App() {
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
+  const [eventToast, setEventToast] = useState("");
   const [achievementToast, setAchievementToast] = useState<AchievementDefinition | null>(null);
   const [stormPhase, setStormPhase] = useState<StormPhase>("clear");
+  const [localShield, setLocalShield] = useState(0);
+  const [remoteShield, setRemoteShield] = useState(0);
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
@@ -195,6 +204,8 @@ function App() {
   const boardSwitchTimer = useRef<number | null>(null);
   const boardReturnTimer = useRef<number | null>(null);
   const copyNoticeTimer = useRef<number | null>(null);
+  const eventToastTimer = useRef<number | null>(null);
+  const lastEventToast = useRef<{ message: string; at: number }>({ message: "", at: 0 });
   const achievementToastTimer = useRef<number | null>(null);
   const stormTimer = useRef<number | null>(null);
   const stormClearTimer = useRef<number | null>(null);
@@ -280,7 +291,7 @@ function App() {
   }
 
   function playShotResultSound(result: ShotResult, volume = 1): void {
-    if (result === "miss") {
+    if (result === "miss" || result === "shielded") {
       audio.play("miss", volume);
       return;
     }
@@ -316,6 +327,22 @@ function App() {
       achievementToastTimer.current = null;
       setAchievementToast(null);
     }, 2600);
+  }
+
+  function showEventToast(message: string) {
+    const now = performance.now();
+    if (lastEventToast.current.message === message && now - lastEventToast.current.at < 1500) {
+      return;
+    }
+    lastEventToast.current = { message, at: now };
+    setEventToast(message);
+    if (eventToastTimer.current !== null) {
+      window.clearTimeout(eventToastTimer.current);
+    }
+    eventToastTimer.current = window.setTimeout(() => {
+      eventToastTimer.current = null;
+      setEventToast("");
+    }, 2200);
   }
 
   function unlockLocalAchievement(achievementId: string) {
@@ -383,6 +410,9 @@ function App() {
       }
       if (achievementToastTimer.current !== null) {
         window.clearTimeout(achievementToastTimer.current);
+      }
+      if (eventToastTimer.current !== null) {
+        window.clearTimeout(eventToastTimer.current);
       }
       if (stormTimer.current !== null) {
         window.clearTimeout(stormTimer.current);
@@ -489,7 +519,7 @@ function App() {
         stormClearTimer.current = null;
         setStormPhase("clear");
       }, 1400);
-    }, 3000);
+    }, 10000);
   }, [game.moves, game.phase, game.settings.modifiers.stormMode, matchMode]);
 
   useEffect(() => {
@@ -524,13 +554,14 @@ function App() {
 
   function updateSettings(settings: GameSettings) {
     const nextSettings = normalizeSettings(settings);
-    const nextConfig = getBoardConfig(nextSettings.boardId);
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
+    setLocalShield(0);
+    setRemoteShield(0);
     setGame((current) => ({
       ...resetBoards(current, nextSettings),
-      localBoard: randomizeFleet(nextConfig),
+      localBoard: createBoardForSettings(nextSettings),
       selectedShipId: null
     }));
     if (matchMode === "p2p" && peerRole === "host") {
@@ -576,14 +607,18 @@ function App() {
   }, [game.localBoard, game.phase, localReady, orientation, selectedShip]);
 
   function shuffle() {
-    const board = randomizeFleet(config);
+    const board = createBoardForSettings(game.settings);
     setLocalReady(false);
+    setLocalShield(0);
+    setRemoteShield(0);
     setGame((current) => ({ ...current, localBoard: board, selectedShipId: nextUnplacedShipId(current.settings, new Set(board.ships.map((ship) => ship.id))) }));
   }
 
   function beginLocalBattle() {
-    const remoteBoard = randomizeFleet(config);
+    const remoteBoard = createBoardForSettings(game.settings);
     matchRecordedRef.current = false;
+    setLocalShield(0);
+    setRemoteShield(0);
     setMatchMode("practice");
     setOpponent(guestIdentity);
     setGame((current) => startBattle(current, remoteBoard));
@@ -593,7 +628,7 @@ function App() {
     if (game.phase !== "battle" || game.turn !== "local") {
       return;
     }
-    if (game.remoteBoard.shots[coordKey(coord)] || isSunkBufferCoord(game.remoteBoard, coord)) {
+    if (hasBlockingShot(game.remoteBoard, coord) || isSunkBufferCoord(game.remoteBoard, coord)) {
       return;
     }
     setSelectedTarget(coord);
@@ -603,12 +638,58 @@ function App() {
     if (!selectedTarget) {
       return;
     }
-    if (game.remoteBoard.shots[coordKey(selectedTarget)] || isSunkBufferCoord(game.remoteBoard, selectedTarget)) {
+    if (hasBlockingShot(game.remoteBoard, selectedTarget) || isSunkBufferCoord(game.remoteBoard, selectedTarget)) {
       setSelectedTarget(null);
       return;
     }
     fire(selectedTarget);
   }, [game.remoteBoard, selectedTarget]);
+
+  function sameCoord(left: Coordinate, right: Coordinate): boolean {
+    return left.row === right.row && left.col === right.col;
+  }
+
+  function availableChaosTargets(board: BoardState, coord: Coordinate): Coordinate[] {
+    return [
+      { row: coord.row - 1, col: coord.col },
+      { row: coord.row + 1, col: coord.col },
+      { row: coord.row, col: coord.col - 1 },
+      { row: coord.row, col: coord.col + 1 }
+    ].filter((candidate) => (
+      candidate.row >= 0 &&
+      candidate.col >= 0 &&
+      candidate.row < board.size &&
+      candidate.col < board.size &&
+      !hasBlockingShot(board, candidate) &&
+      !isSunkBufferCoord(board, candidate)
+    ));
+  }
+
+  function applyPirateChaos(coord: Coordinate, board: BoardState): { coord: Coordinate; message?: string } {
+    if (!game.settings.modifiers.pirateChaos) {
+      return { coord };
+    }
+    const options = availableChaosTargets(board, coord);
+    if (!options.length) {
+      return { coord };
+    }
+
+    const roll = Math.random();
+    if (roll < 0.14) {
+      return {
+        coord: options[Math.floor(Math.random() * options.length)],
+        message: "Rum fog wobbled your aim."
+      };
+    }
+    if (roll < 0.34) {
+      return {
+        coord: options[Math.floor(Math.random() * options.length)],
+        message: "Cursed cannonball curved!"
+      };
+    }
+
+    return { coord };
+  }
 
   useEffect(() => {
     function handleFireShortcut(event: KeyboardEvent) {
@@ -636,9 +717,70 @@ function App() {
     if (game.turn !== "local") {
       return;
     }
-    const { state, outcome } = attack(game, "remote", coord);
+    const chaos = applyPirateChaos(coord, game.remoteBoard);
+    const finalCoord = chaos.coord;
+    const treasure = findTreasureAt(game.remoteBoard, finalCoord);
+    if (treasure) {
+      const remoteBoard = markTreasureShot(game.remoteBoard, finalCoord);
+      const nextLocalShield = treasure === "shield" ? localShield + 1 : localShield;
+      if (treasure === "shield") {
+        setLocalShield(nextLocalShield);
+        showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Treasure found: one-hit shield armed.`);
+      } else {
+        showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Fake treasure! You got faked out.`);
+      }
+      const state: GameState = {
+        ...game,
+        remoteBoard,
+        turn: "remote",
+        moves: game.moves + 1,
+        log: [`local ${treasure === "shield" ? "TREASURE" : "FAKE TREASURE"} at ${finalCoord.row + 1},${finalCoord.col + 1}`, ...game.log].slice(0, 30)
+      };
+      setSelectedTarget(null);
+      showBattleBoard("fleet", BOARD_RETURN_DELAY_MS, BOARD_SWITCH_DELAY_MS);
+      playAttackVisual("remote", finalCoord, "miss");
+      playShotResultSound("miss");
+      setGameAfterImpact(state, game.turn);
+      setStats((current) => awardXp({ ...current, totalShots: current.totalShots + 1 }, xpAwards.shot));
+      network.current?.send("shot", { coord: finalCoord } satisfies ShotPayload);
+      if (matchMode === "practice") {
+        window.setTimeout(() => remoteTurn(state), 450);
+      }
+      return;
+    }
+
+    const protectedShip = remoteShield > 0 ? findShipAt(game.remoteBoard, finalCoord) : undefined;
+    if (protectedShip) {
+      const remoteBoard = markShieldedShot(game.remoteBoard, finalCoord);
+      const nextRemoteShield = Math.max(0, remoteShield - 1);
+      setRemoteShield(nextRemoteShield);
+      showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Shield blocked the hit.`);
+      const state: GameState = {
+        ...game,
+        remoteBoard,
+        turn: "remote",
+        moves: game.moves + 1,
+        log: [`local SHIELDED at ${finalCoord.row + 1},${finalCoord.col + 1}`, ...game.log].slice(0, 30)
+      };
+      setSelectedTarget(null);
+      showBattleBoard("fleet", BOARD_RETURN_DELAY_MS, BOARD_SWITCH_DELAY_MS);
+      playAttackVisual("remote", finalCoord, "shielded");
+      playShotResultSound("shielded");
+      setGameAfterImpact(state, game.turn);
+      setStats((current) => awardXp({ ...current, totalShots: current.totalShots + 1 }, xpAwards.shot));
+      network.current?.send("shot", { coord: finalCoord } satisfies ShotPayload);
+      if (matchMode === "practice") {
+        window.setTimeout(() => remoteTurn(state), 450);
+      }
+      return;
+    }
+
+    const { state, outcome } = attack(game, "remote", finalCoord);
     if (outcome.result === "invalid" || outcome.result === "duplicate") {
       return;
+    }
+    if (chaos.message && !sameCoord(coord, finalCoord)) {
+      showEventToast(chaos.message);
     }
     setSelectedTarget(null);
     showBattleBoard(
@@ -646,7 +788,7 @@ function App() {
       outcome.nextTurn === "remote" ? BOARD_RETURN_DELAY_MS : 0,
       outcome.nextTurn === "remote" ? BOARD_SWITCH_DELAY_MS : 0
     );
-    playAttackVisual("remote", coord, outcome.result);
+    playAttackVisual("remote", finalCoord, outcome.result);
     playShotResultSound(outcome.result);
     setGameAfterImpact(state, game.turn);
     setStats((current) =>
@@ -669,7 +811,7 @@ function App() {
     if (outcome.result === "sunk") {
       unlockLocalAchievement("first_sink");
     }
-    network.current?.send("shot", { coord } satisfies ShotPayload);
+    network.current?.send("shot", { coord: finalCoord } satisfies ShotPayload);
     if (outcome.winner) {
       endMatch("win", state);
       return;
@@ -684,6 +826,46 @@ function App() {
     if (!pick) {
       return;
     }
+    const treasure = findTreasureAt(currentGame.localBoard, pick);
+    if (treasure) {
+      const localBoard = markTreasureShot(currentGame.localBoard, pick);
+      if (treasure === "shield") {
+        setRemoteShield((value) => value + 1);
+      }
+      const state: GameState = {
+        ...currentGame,
+        localBoard,
+        turn: "local",
+        moves: currentGame.moves + 1,
+        log: [`remote ${treasure === "shield" ? "TREASURE" : "FAKE TREASURE"} at ${pick.row + 1},${pick.col + 1}`, ...currentGame.log].slice(0, 30)
+      };
+      playAttackVisual("local", pick, "miss", OPPONENT_SOUND_VOLUME);
+      playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
+      showBattleBoard("target", 0, BOARD_SWITCH_DELAY_MS);
+      setGameAfterImpact(state, currentGame.turn);
+      notifyLocalTurn();
+      return;
+    }
+
+    const protectedShip = localShield > 0 ? findShipAt(currentGame.localBoard, pick) : undefined;
+    if (protectedShip) {
+      setLocalShield((value) => Math.max(0, value - 1));
+      showEventToast("Your shield blocked a hit.");
+      const state: GameState = {
+        ...currentGame,
+        localBoard: markShieldedShot(currentGame.localBoard, pick),
+        turn: "local",
+        moves: currentGame.moves + 1,
+        log: [`remote SHIELDED at ${pick.row + 1},${pick.col + 1}`, ...currentGame.log].slice(0, 30)
+      };
+      playAttackVisual("local", pick, "shielded", OPPONENT_SOUND_VOLUME);
+      playShotResultSound("shielded", OPPONENT_SOUND_VOLUME);
+      showBattleBoard("target", 0, BOARD_SWITCH_DELAY_MS);
+      setGameAfterImpact(state, currentGame.turn);
+      notifyLocalTurn();
+      return;
+    }
+
     const { state, outcome } = attack(currentGame, "local", pick);
     if (outcome.result !== "invalid" && outcome.result !== "duplicate") {
       playAttackVisual("local", pick, outcome.result, OPPONENT_SOUND_VOLUME);
@@ -832,15 +1014,16 @@ function App() {
 
       if (message.type === "settings") {
         const settings = normalizeSettings(message.payload as GameSettings);
-        const nextConfig = getBoardConfig(settings.boardId);
         setGame((current) => ({
           ...resetBoards(current, settings),
-          localBoard: randomizeFleet(nextConfig),
+          localBoard: createBoardForSettings(settings),
           selectedShipId: null
         }));
         setLocalReady(false);
         setRemoteReady(false);
         setRemoteBoardReady(null);
+        setLocalShield(0);
+        setRemoteShield(0);
         setActiveTab("play");
         setNetworkStatus("Host settings received. Click ships to rotate, then Ready.");
         return;
@@ -922,6 +1105,64 @@ function App() {
 
   function receiveRemoteShot(coord: Coordinate) {
     const current = gameRef.current;
+    const treasure = findTreasureAt(current.localBoard, coord);
+    if (treasure) {
+      const board = markTreasureShot(current.localBoard, coord);
+      const nextRemoteShield = treasure === "shield" ? remoteShield + 1 : remoteShield;
+      if (treasure === "shield") {
+        setRemoteShield(nextRemoteShield);
+      }
+      playAttackVisual("local", coord, "miss", OPPONENT_SOUND_VOLUME);
+      playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
+      const nextState: GameState = {
+        ...current,
+        localBoard: board,
+        turn: "local",
+        moves: current.moves + 1,
+        log: [`remote ${treasure === "shield" ? "TREASURE" : "FAKE TREASURE"} at ${coord.row + 1},${coord.col + 1}`, ...current.log].slice(0, 30)
+      };
+      showBattleBoard("target", 0, BOARD_SWITCH_DELAY_MS);
+      setGameAfterImpact(nextState, current.turn);
+      network.current?.send("shot-result", {
+        coord,
+        result: "miss",
+        nextTurn: "local",
+        winner: null,
+        attackerShield: nextRemoteShield,
+        treasureKind: treasure
+      } satisfies ShotResultPayload);
+      notifyLocalTurn();
+      return;
+    }
+
+    const shieldedShip = localShield > 0 ? findShipAt(current.localBoard, coord) : undefined;
+    if (shieldedShip) {
+      const nextLocalShield = Math.max(0, localShield - 1);
+      setLocalShield(nextLocalShield);
+      showEventToast("Your shield blocked a hit.");
+      const board = markShieldedShot(current.localBoard, coord);
+      playAttackVisual("local", coord, "shielded", OPPONENT_SOUND_VOLUME);
+      playShotResultSound("shielded", OPPONENT_SOUND_VOLUME);
+      const nextState: GameState = {
+        ...current,
+        localBoard: board,
+        turn: "local",
+        moves: current.moves + 1,
+        log: [`remote SHIELDED at ${coord.row + 1},${coord.col + 1}`, ...current.log].slice(0, 30)
+      };
+      showBattleBoard("target", 0, BOARD_SWITCH_DELAY_MS);
+      setGameAfterImpact(nextState, current.turn);
+      network.current?.send("shot-result", {
+        coord,
+        result: "shielded",
+        nextTurn: "local",
+        winner: null,
+        defenderShield: nextLocalShield
+      } satisfies ShotResultPayload);
+      notifyLocalTurn();
+      return;
+    }
+
     const shot = receiveShot(current.localBoard, coord);
     if (shot.result === "duplicate") {
       return;
@@ -947,7 +1188,8 @@ function App() {
       result: shot.result,
       shipId: shot.shipId,
       nextTurn,
-      winner
+      winner,
+      defenderShield: localShield
     } satisfies ShotResultPayload);
     if (winner) {
       endMatch("loss", nextState);
@@ -967,8 +1209,27 @@ function App() {
   }
 
   function applyRemoteShotResult(payload: ShotResultPayload) {
+    if (payload.attackerShield !== undefined) {
+      setLocalShield(payload.attackerShield);
+    }
+    if (payload.defenderShield !== undefined) {
+      setRemoteShield(payload.defenderShield);
+    }
+    if (payload.chaosMessage) {
+      showEventToast(payload.chaosMessage);
+    }
+    if (payload.treasureKind === "shield") {
+      showEventToast("Treasure found: one-hit shield armed.");
+    } else if (payload.treasureKind === "fake") {
+      showEventToast("Fake treasure! You got faked out.");
+    } else if (payload.result === "shielded") {
+      showEventToast("Shield blocked the hit.");
+    }
     setGame((current) => {
-      const shot = receiveShot(current.remoteBoard, payload.coord);
+      const shot =
+        payload.treasureKind ? { board: markTreasureShot(current.remoteBoard, payload.coord), result: "miss" as ShotResult } :
+        payload.result === "shielded" ? { board: markShieldedShot(current.remoteBoard, payload.coord), result: "shielded" as ShotResult } :
+        receiveShot(current.remoteBoard, payload.coord);
       const nextWinner: PlayerSide | null = payload.winner === "local" ? "remote" : payload.winner === "remote" ? "local" : null;
       const nextTurn: PlayerSide = payload.nextTurn === "local" ? "remote" : "local";
       const phase = nextWinner === "local" ? "victory" : nextWinner === "remote" ? "defeat" : current.phase;
@@ -1238,6 +1499,7 @@ function App() {
                       onCellPress={selectTarget}
                       attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
                       fogActive={game.phase === "battle" && game.settings.modifiers.fogTide}
+                      chaosActive={game.phase === "battle" && game.settings.modifiers.pirateChaos}
                       stormPhase={stormPhase}
                       label="Target board"
                     />
@@ -1247,6 +1509,7 @@ function App() {
                       board={game.localBoard}
                       revealShips
                       attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
+                      chaosActive={game.phase === "battle" && game.settings.modifiers.pirateChaos}
                       stormPhase={stormPhase}
                       label="Your board"
                     />
@@ -1366,6 +1629,7 @@ function App() {
       )}
       {activeTab === "achievements" && <AchievementsPanel stats={stats} />}
       {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}
+      {eventToast && <div className="event-toast" role="status">{eventToast}</div>}
       {achievementToast && (
         <div className="achievement-toast" role="status">
           <Trophy size={20} />

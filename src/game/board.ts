@@ -1,4 +1,4 @@
-import type { BoardConfig, BoardState, Coordinate, Orientation, PlacedShip, ShipDefinition, ShotResult } from "../types/game";
+import type { BoardConfig, BoardState, Coordinate, Orientation, PlacedShip, ShipDefinition, ShotResult, TreasureKind } from "../types/game";
 
 export function coordKey(coord: Coordinate): string {
   return `${coord.row}:${coord.col}`;
@@ -8,7 +8,9 @@ export function makeBoard(config: BoardConfig): BoardState {
   return {
     size: config.size,
     ships: [],
-    shots: {}
+    shots: {},
+    treasures: {},
+    treasureHits: {}
   };
 }
 
@@ -141,9 +143,38 @@ export function allShipsSunk(board: BoardState): boolean {
   return board.ships.length > 0 && board.ships.every(isShipSunk);
 }
 
+export function hasBlockingShot(board: BoardState, coord: Coordinate): boolean {
+  const shot = board.shots[coordKey(coord)];
+  return Boolean(shot && shot !== "shielded");
+}
+
+export function findTreasureAt(board: BoardState, coord: Coordinate): TreasureKind | undefined {
+  const key = coordKey(coord);
+  if (board.treasureHits?.[key]) {
+    return undefined;
+  }
+  return board.treasures?.[key];
+}
+
+export function markTreasureShot(board: BoardState, coord: Coordinate): BoardState {
+  const key = coordKey(coord);
+  return {
+    ...board,
+    shots: { ...board.shots, [key]: "miss" },
+    treasureHits: { ...(board.treasureHits ?? {}), [key]: true }
+  };
+}
+
+export function markShieldedShot(board: BoardState, coord: Coordinate): BoardState {
+  return {
+    ...board,
+    shots: { ...board.shots, [coordKey(coord)]: "shielded" }
+  };
+}
+
 export function receiveShot(board: BoardState, coord: Coordinate): { board: BoardState; result: ShotResult; shipId?: string } {
   const key = coordKey(coord);
-  if (board.shots[key]) {
+  if (hasBlockingShot(board, coord)) {
     return { board, result: "duplicate" };
   }
 
@@ -206,6 +237,39 @@ export function randomizeFleet(config: BoardConfig, maxAttempts = 900): BoardSta
   }
 
   return makeBoard(config);
+}
+
+export function seedTreasures(board: BoardState, shields: number, fakes: number): BoardState {
+  const occupied = new Set(board.ships.flatMap(getShipCells).map(coordKey));
+  const candidates: Coordinate[] = [];
+
+  for (let row = 0; row < board.size; row += 1) {
+    for (let col = 0; col < board.size; col += 1) {
+      const coord = { row, col };
+      if (!occupied.has(coordKey(coord))) {
+        candidates.push(coord);
+      }
+    }
+  }
+
+  const treasures = { ...(board.treasures ?? {}) };
+  const place = (kind: TreasureKind) => {
+    if (!candidates.length) {
+      return;
+    }
+    const index = Math.floor(Math.random() * candidates.length);
+    const [coord] = candidates.splice(index, 1);
+    treasures[coordKey(coord)] = kind;
+  };
+
+  for (let index = 0; index < shields; index += 1) {
+    place("shield");
+  }
+  for (let index = 0; index < fakes; index += 1) {
+    place("fake");
+  }
+
+  return { ...board, treasures, treasureHits: {} };
 }
 
 export function getVisibleCell(board: BoardState, coord: Coordinate, revealShips: boolean): "empty" | "ship" | ShotResult {

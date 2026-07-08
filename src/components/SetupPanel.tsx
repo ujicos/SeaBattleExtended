@@ -94,6 +94,28 @@ export function SetupPanel({ settings, orientation, onSettings, onRotate, onShuf
             <small>Storm waves can nudge unhit ships.</small>
           </span>
         </label>
+        <label className="toggle modifier-toggle">
+          <input
+            type="checkbox"
+            checked={settings.modifiers.treasureTiles}
+            onChange={(event) => onSettings({ ...settings, modifiers: { ...settings.modifiers, treasureTiles: event.target.checked } })}
+          />
+          <span>
+            <strong>Treasure Tiles</strong>
+            <small>Hidden treasure grants a shield for the next hit.</small>
+          </span>
+        </label>
+        <label className="toggle modifier-toggle">
+          <input
+            type="checkbox"
+            checked={settings.modifiers.pirateChaos}
+            onChange={(event) => onSettings({ ...settings, modifiers: { ...settings.modifiers, pirateChaos: event.target.checked } })}
+          />
+          <span>
+            <strong>Pirate Chaos</strong>
+            <small>Rum fog, fake treasure, and curved cannonballs.</small>
+          </span>
+        </label>
       </div>
       <div className="action-row">
         <button className="icon-button" type="button" onClick={onRotate} title="Rotate selected ship">

@@ -141,6 +141,15 @@ VITE_SIGNALING_URL=wss://your-signaling-host.example npm run build
 - Asset manager and audio manager with stable public drop-in paths.
 - Responsive mobile-first UI using CSS, no frame-locked animation loop.
 
+## Game Modifiers
+
+Modifiers are optional pre-game rules selected from the setup panel before practice or P2P play.
+
+- `Fog Tide`: adds a lightweight animated fog layer over the target board. It is visual pressure only; your selected square is still the square you fire at.
+- `Storm Mode`: every few moves, `storm_warn.mp3` plays 10 seconds before a storm wave hits. At impact, `storm_wave.mp3` plays and the storm may nudge one fully unhit ship by one square if normal placement rules still allow it. In P2P, moved boards are synced after the wave.
+- `Treasure Tiles`: hidden treasure can appear on water tiles. Hitting real treasure grants a one-hit shield. The shield blocks the next shot that would successfully hit one of your ships, consumes the shield, and lets that same square be fired at again later.
+- `Pirate Chaos`: adds rum fog, fake treasure, and cursed cannonballs. Rum fog and curved cannonballs can randomly shift a fired shot to a valid neighboring square without preview; after firing, a toast tells you what happened. Fake treasure reveals itself after firing and grants no reward.
+
 ## Asset Paths
 
 Drop your files into:

@@ -1,13 +1,21 @@
 import { defaultSettings, getBoardConfig } from "./config";
-import { allShipsSunk, makeBoard, randomizeFleet, receiveShot } from "./board";
+import { allShipsSunk, makeBoard, randomizeFleet, receiveShot, seedTreasures } from "./board";
 import type { BoardState, Coordinate, GameSettings, GameState, PlayerSide, ShotOutcome } from "../types/game";
+
+export function createBoardForSettings(settings: GameSettings): BoardState {
+  const config = getBoardConfig(settings.boardId);
+  const board = randomizeFleet(config);
+  const shieldCount = settings.modifiers.treasureTiles ? Math.max(1, Math.floor(config.size / 8)) : 0;
+  const fakeCount = settings.modifiers.pirateChaos ? Math.max(2, Math.floor(config.size / 6)) : 0;
+  return shieldCount || fakeCount ? seedTreasures(board, shieldCount, fakeCount) : board;
+}
 
 export function createInitialGame(settings: GameSettings = defaultSettings): GameState {
   const config = getBoardConfig(settings.boardId);
   return {
     phase: "menu",
     settings,
-    localBoard: randomizeFleet(config),
+    localBoard: createBoardForSettings(settings),
     remoteBoard: makeBoard(config),
     turn: "local",
     selectedShipId: null,
@@ -25,7 +33,7 @@ export function resetBoards(state: GameState, settings: GameSettings): GameState
     ...state,
     settings,
     phase: "placing",
-    localBoard: randomizeFleet(config),
+    localBoard: createBoardForSettings(settings),
     remoteBoard: makeBoard(config),
     selectedShipId: null,
     winner: null,
