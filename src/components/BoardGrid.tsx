@@ -1,5 +1,6 @@
 import { ChevronDown, Waves } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { coordKey, getShipBufferCells, getShipCells, isShipSunk } from "../game/board";
 import type { BoardState, Coordinate, Orientation, PlacedShip, ShipDefinition, ShotResult } from "../types/game";
 
@@ -103,6 +104,7 @@ export const BoardGrid = memo(function BoardGrid({
   expanded = true,
   onToggleExpand
 }: BoardGridProps) {
+  const touchDrag = useRef<{ active: boolean; moved: boolean; coord: Coordinate | null }>({ active: false, moved: false, coord: null });
   const previewMap = useMemo(
     () => new Map(preview?.cells.map((cell) => [coordKey(cell), preview.valid ? "valid" : "invalid"])),
     [preview]
@@ -140,6 +142,41 @@ export const BoardGrid = memo(function BoardGrid({
 
   const showGrid = !collapsible || expanded;
 
+  function coordFromGridEvent(event: ReactPointerEvent<HTMLElement>): Coordinate | null {
+    const grid = event.currentTarget;
+    const rect = grid.getBoundingClientRect();
+    const col = Math.floor(((event.clientX - rect.left) / rect.width) * board.size);
+    const row = Math.floor(((event.clientY - rect.top) / rect.height) * board.size);
+    if (row < 0 || row >= board.size || col < 0 || col >= board.size) {
+      return null;
+    }
+    return { row, col };
+  }
+
+  function sameCoord(left: Coordinate | null, right: Coordinate | null): boolean {
+    return Boolean(left && right && left.row === right.row && left.col === right.col);
+  }
+
+  function handleTouchMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!touchDrag.current.active) {
+      return;
+    }
+    const coord = coordFromGridEvent(event);
+    if (!sameCoord(touchDrag.current.coord, coord)) {
+      touchDrag.current.moved = true;
+      touchDrag.current.coord = coord;
+      onCellHover?.(coord);
+    }
+  }
+
+  function handleTouchEnd() {
+    if (touchDrag.current.active && touchDrag.current.coord) {
+      onCellPress?.(touchDrag.current.coord);
+    }
+    touchDrag.current = { active: false, moved: false, coord: null };
+    onCellHover?.(null);
+  }
+
   return (
     <section className={compact ? "board-panel compact-board" : "board-panel"}>
       {collapsible ? (
@@ -163,7 +200,13 @@ export const BoardGrid = memo(function BoardGrid({
         <div
           className="board-grid"
           style={{ "--board-size": board.size } as React.CSSProperties}
-          onPointerLeave={() => onCellHover?.(null)}
+          onPointerMove={handleTouchMove}
+          onPointerUp={handleTouchEnd}
+          onPointerCancel={handleTouchEnd}
+          onPointerLeave={() => {
+            touchDrag.current = { active: false, moved: false, coord: null };
+            onCellHover?.(null);
+          }}
         >
           {attackAnimation && (
             <div
@@ -203,7 +246,14 @@ export const BoardGrid = memo(function BoardGrid({
                 disabled={!interactive || blocked}
                 aria-label={`Row ${coord.row + 1}, column ${coord.col + 1}`}
                 onPointerEnter={() => onCellHover?.(coord)}
-                onPointerDown={() => onCellPress?.(coord)}
+                onPointerDown={(event) => {
+                  if (event.pointerType === "touch" || event.pointerType === "pen") {
+                    touchDrag.current = { active: true, moved: false, coord };
+                    onCellHover?.(coord);
+                    return;
+                  }
+                  onCellPress?.(coord);
+                }}
               >
                 {value === "miss" && <Waves size={13} />}
                 {showShipSprite && ship && (

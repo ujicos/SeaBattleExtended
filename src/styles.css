@@ -270,7 +270,6 @@ small,
 }
 
 .panel,
-.board-panel,
 .result {
   content-visibility: auto;
   contain-intrinsic-size: auto 320px;
@@ -412,6 +411,7 @@ select {
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--board-size), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--board-size), minmax(0, 1fr));
   gap: 1px;
   aspect-ratio: 1;
   width: min(100%, 720px);
@@ -420,6 +420,7 @@ select {
   padding: 1px;
   background: rgba(4, 14, 21, 0.88);
   contain: layout paint;
+  touch-action: none;
 }
 
 .compact-board .board-grid {
@@ -442,6 +443,8 @@ select {
   color: #cffbf3;
   padding: 0;
   line-height: 1;
+  appearance: none;
+  touch-action: none;
 }
 
 .cell > svg {
@@ -950,6 +953,11 @@ select {
   padding: 0 12px;
 }
 
+.danger-action {
+  color: #ffd7dc;
+  border-color: rgba(255, 101, 124, 0.42);
+}
+
 .audio-toggle {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1146,6 +1154,12 @@ select {
 .p2p-ready-panel {
   display: grid;
   gap: 10px;
+}
+
+@media (min-width: 761px) {
+  .setup-focus .p2p-ready-panel {
+    grid-column: 2;
+  }
 }
 
 .setup-room-code {

@@ -122,7 +122,6 @@ function App() {
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
-  const [fleetPanelExpanded, setFleetPanelExpanded] = useState(false);
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
@@ -306,8 +305,8 @@ function App() {
     }
     setJoinCode(sharedRoom);
     setRoomCode(sharedRoom);
-    setActiveTab("lobby");
-    setNetworkStatus("Shared lobby link ready. Tap Join Game to connect.");
+    setActiveTab("play");
+    void joinRoom(sharedRoom);
   }, []);
 
   useEffect(() => {
@@ -472,6 +471,28 @@ function App() {
     fire(selectedTarget);
   }, [game.remoteBoard, selectedTarget]);
 
+  useEffect(() => {
+    function handleFireShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (isTyping || (event.key !== "Enter" && event.key !== " ")) {
+        return;
+      }
+      if (gameRef.current.phase !== "battle" || gameRef.current.turn !== "local" || battleBoardView !== "target" || !selectedTarget) {
+        return;
+      }
+      event.preventDefault();
+      fireSelectedTarget();
+    }
+
+    window.addEventListener("keydown", handleFireShortcut);
+    return () => window.removeEventListener("keydown", handleFireShortcut);
+  }, [battleBoardView, fireSelectedTarget, selectedTarget]);
+
   function fire(coord: Coordinate) {
     if (game.turn !== "local") {
       return;
@@ -544,6 +565,37 @@ function App() {
     );
   }
 
+  function leaveOrForfeit() {
+    const current = gameRef.current;
+    const forfeitingBattle = matchMode === "p2p" && current.phase === "battle";
+    network.current?.send("forfeit", { phase: current.phase });
+    network.current?.close();
+    network.current = null;
+    setPeerRole(null);
+    setMatchMode("practice");
+    setOpponent(guestIdentity);
+    setLocalReady(false);
+    setRemoteReady(false);
+    setRemoteBoardReady(null);
+    setRoomCode("");
+    setJoinCode("");
+    setNetworkStatus("Offline practice");
+    setBattleBoardView("target");
+    setSelectedTarget(null);
+    if (forfeitingBattle) {
+      const nextState: GameState = {
+        ...current,
+        phase: "defeat",
+        winner: "remote",
+        endedAt: performance.now()
+      };
+      setGame(nextState);
+      endMatch("loss", nextState);
+      return;
+    }
+    setGame((latest) => resetBoards(latest, latest.settings));
+  }
+
   async function createRoom() {
     if (network.current) {
       network.current.close();
@@ -575,7 +627,11 @@ function App() {
     setOpenLobbies(await listOpenLobbies());
   }
 
-  async function joinRoom() {
+  async function joinRoom(roomCodeOverride = joinCode) {
+    const codeToJoin = roomCodeOverride.trim().toUpperCase();
+    if (!codeToJoin) {
+      return;
+    }
     if (network.current) {
       network.current.close();
     }
@@ -594,8 +650,9 @@ function App() {
         client.send("identity", makeIdentity(profile, stats));
       }
     });
-    await client.joinRoom(joinCode, makeIdentity(profile, stats));
-    setRoomCode(joinCode.toUpperCase());
+    setJoinCode(codeToJoin);
+    await client.joinRoom(codeToJoin, makeIdentity(profile, stats));
+    setRoomCode(codeToJoin);
     setActiveTab("play");
   }
 
@@ -643,6 +700,22 @@ function App() {
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
         setNetworkStatus("Battle started. Host fires first.");
         setActiveTab("play");
+        return;
+      }
+
+      if (message.type === "forfeit") {
+        const current = gameRef.current;
+        if (current.phase === "battle") {
+          const nextState: GameState = {
+            ...current,
+            phase: "victory",
+            winner: "local",
+            endedAt: performance.now()
+          };
+          setGame(nextState);
+          endMatch("win", nextState);
+        }
+        setNetworkStatus("Opponent left the game.");
         return;
       }
 
@@ -832,29 +905,6 @@ function App() {
           )}
           {game.phase === "placing" && (
             <>
-              <section className="panel ship-list">
-                <button
-                  className="section-title collapsible-header"
-                  type="button"
-                  onClick={() => setFleetPanelExpanded((value) => !value)}
-                  aria-expanded={fleetPanelExpanded}
-                >
-                  <span>Fleet</span>
-                  <small>{game.localBoard.ships.length}/{config.fleet.length}</small>
-                  <ChevronDown className={`collapse-chevron${fleetPanelExpanded ? " expanded" : ""}`} size={16} />
-                </button>
-                {fleetPanelExpanded && config.fleet.map((ship) => (
-                  <button
-                    className={game.selectedShipId === ship.id ? "ship-row active" : "ship-row"}
-                    type="button"
-                    key={ship.id}
-                    onClick={() => setGame((current) => ({ ...current, selectedShipId: ship.id }))}
-                  >
-                    <span>{ship.name}</span>
-                    <small>{ship.length} cells</small>
-                  </button>
-                ))}
-              </section>
               <BoardGrid
                 board={game.localBoard}
                 revealShips
@@ -914,9 +964,12 @@ function App() {
                   </button>
                   {peerRole === "host" && (
                     <button className="secondary" type="button" disabled={!localReady || !remoteReady} onClick={startP2PBattle}>
-                      Start multiplayer battle
+                      Start P2P Battle
                     </button>
                   )}
+                  <button className="secondary" type="button" onClick={leaveOrForfeit}>
+                    Leave game
+                  </button>
                 </section>
               )}
             </>
@@ -937,6 +990,11 @@ function App() {
                   <BarChart3 size={18} />
                   Stats
                 </button>
+                {matchMode === "p2p" && game.phase === "battle" && (
+                  <button className="icon-button stats-match-button danger-action" type="button" onClick={leaveOrForfeit} title="Forfeit match">
+                    Forfeit
+                  </button>
+                )}
                 <div className="audio-toggle" aria-label="Audio settings">
                   {([
                     ["on", Volume2, "All"],
@@ -1077,10 +1135,7 @@ function App() {
                     className="lobby-row"
                     type="button"
                     key={lobby.roomCode}
-                    onClick={() => {
-                      setJoinCode(lobby.roomCode);
-                      setRoomCode(lobby.roomCode);
-                    }}
+                    onClick={() => void joinRoom(lobby.roomCode)}
                   >
                     <strong>{lobby.roomCode}</strong>
                     <small>{Math.max(0, Math.round((Date.now() - lobby.updatedAt) / 60000))}m ago</small>
