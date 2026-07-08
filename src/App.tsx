@@ -11,7 +11,7 @@ import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createBoardForSettings, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { assets } from "./services/assets";
 import { audio } from "./services/audio";
-import { listOpenLobbies, PeerGameClient, type LobbySummary } from "./services/network";
+import { fetchPresenceStatus, leavePresence, PeerGameClient, pingPresence, type LobbySummary, type PresenceStatus } from "./services/network";
 import {
   loadProfile,
   loadStats,
@@ -105,6 +105,55 @@ function normalizeSettings(settings: GameSettings): GameSettings {
   };
 }
 
+function formatNetworkStatus(status: string): string {
+  if (status.startsWith("Signaling connected:")) {
+    const code = status.split(":")[1]?.trim();
+    return code ? `Signaling online. Room ${code} registered.` : "Signaling online. Room registered.";
+  }
+  if (status === "P2P channel opening") {
+    return "P2P connection establishing...";
+  }
+  if (status === "P2P channel not ready yet") {
+    return "Packet queued. P2P channel opening...";
+  }
+  if (status === "P2P data channel open") {
+    return "P2P ready. Data channel open.";
+  }
+  if (status === "P2P data channel closed") {
+    return "P2P closed. Connection ended.";
+  }
+  if (status === "connecting") {
+    return "Peer handshake in progress...";
+  }
+  if (status === "connected") {
+    return "Peer link connected.";
+  }
+  if (status === "disconnected") {
+    return "Peer link interrupted. Reconnecting...";
+  }
+  if (status === "failed") {
+    return "Peer link failed. Create or join again.";
+  }
+  if (status === "closed") {
+    return "Peer link closed.";
+  }
+  return status;
+}
+
+function animateWaitingText(text: string, waitingLabel: string): string {
+  return text.replace(/Waiting(?:\.\.\.|\.\.|\.)?/g, waitingLabel);
+}
+
+function getPresenceSessionId(): string {
+  const stored = localStorage.getItem(presenceSessionKey);
+  if (stored) {
+    return stored;
+  }
+  const sessionId = crypto.randomUUID();
+  localStorage.setItem(presenceSessionKey, sessionId);
+  return sessionId;
+}
+
 function driftBoardWithStorm(board: BoardState): { board: BoardState; moved: boolean } {
   const candidates = board.ships.flatMap((ship) => {
     if (ship.hits.length > 0) {
@@ -139,6 +188,8 @@ const BOARD_SWITCH_DELAY_MS = 300;
 const BOARD_RETURN_DELAY_MS = 1200;
 const OPPONENT_SOUND_VOLUME = 0.28;
 const audioModeKey = "sea-battle.audio-mode";
+const presenceSessionKey = "sea-battle.presence-session";
+const waitingFrames = ["Waiting", "Waiting.", "Waiting..", "Waiting...", "Waiting..", "Waiting."];
 
 interface ReadyPayload {
   board: BoardState;
@@ -174,6 +225,7 @@ function App() {
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [networkStatus, setNetworkStatus] = useState("Offline practice");
+  const [waitingFrame, setWaitingFrame] = useState(0);
   const [opponent, setOpponent] = useState<PeerIdentity>(guestIdentity);
   const [clock, setClock] = useState<number>(defaultSettings.blitz.seconds);
   const clockRef = useRef(clock);
@@ -195,6 +247,7 @@ function App() {
   const [remoteShield, setRemoteShield] = useState(0);
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
+  const [presenceStatus, setPresenceStatus] = useState<PresenceStatus>({ onlinePlayers: 1, activeGames: 0, lobbies: [] });
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
@@ -224,6 +277,8 @@ function App() {
   const localShipsLeft = Math.max(0, game.localBoard.ships.length - localShipsSunk);
   const shareLink = useMemo(() => makeShareLink(roomCode), [roomCode]);
   const lobbyOpponent = opponent.playerId === guestIdentity.playerId ? waitingIdentity : opponent;
+  const waitingLabel = waitingFrames[waitingFrame];
+  const consoleStatus = useMemo(() => animateWaitingText(networkStatus, waitingLabel), [networkStatus, waitingLabel]);
   const leadingSide: "local" | "remote" | null =
     enemyShipsSunk === localShipsSunk ? null : enemyShipsSunk > localShipsSunk ? "local" : "remote";
   const battleLeadLabel = leadingSide === "local" ? profile.displayName : leadingSide === "remote" ? opponent.displayName : "tied";
@@ -255,6 +310,18 @@ function App() {
   useEffect(() => {
     remoteBoardReadyRef.current = remoteBoardReady;
   }, [remoteBoardReady]);
+
+  useEffect(() => {
+    const shouldAnimateWaiting = matchMode === "p2p" && game.phase === "placing" && (!remoteReady || /Waiting/.test(networkStatus));
+    if (!shouldAnimateWaiting) {
+      setWaitingFrame(0);
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setWaitingFrame((value) => (value + 1) % waitingFrames.length);
+    }, 480);
+    return () => window.clearInterval(interval);
+  }, [game.phase, matchMode, networkStatus, remoteReady]);
 
   function attackDirection(coord: Coordinate): AttackAnimation["direction"] {
     const top = coord.row;
@@ -401,6 +468,39 @@ function App() {
 
   useEffect(() => {
     void loadAppVersion().then(setAppVersion);
+  }, []);
+
+  useEffect(() => {
+    const sessionId = getPresenceSessionId();
+    let active = true;
+
+    async function updatePresence() {
+      const status = await pingPresence(sessionId);
+      if (!active) {
+        return;
+      }
+      setPresenceStatus(status);
+      setOpenLobbies(status.lobbies);
+    }
+
+    void updatePresence();
+    const interval = window.setInterval(() => void updatePresence(), 20000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void updatePresence();
+      }
+    };
+    const handleUnload = () => leavePresence(sessionId);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handleUnload);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handleUnload);
+      leavePresence(sessionId);
+    };
   }, []);
 
   useEffect(() => {
@@ -922,7 +1022,7 @@ function App() {
     setRemoteBoardReady(null);
     setRoomCode("");
     setJoinCode("");
-    setNetworkStatus("Offline practice");
+    setNetworkStatus("P2P closed. Offline practice ready.");
     setBattleBoardView("target");
     setSelectedTarget(null);
     if (forfeitingBattle) {
@@ -948,12 +1048,13 @@ function App() {
     setMatchMode("p2p");
     setPeerRole("host");
     setOpponent(waitingIdentity);
+    setNetworkStatus("Opening P2P room...");
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
     bindPeerClient(client);
     client.onStatus((status) => {
-      setNetworkStatus(status);
+      setNetworkStatus(formatNetworkStatus(status));
       if (status === "P2P data channel open") {
         client.send("identity", makeIdentity(profile, stats));
         client.send("settings", gameRef.current.settings);
@@ -961,13 +1062,16 @@ function App() {
     });
     const code = await client.createRoom(makeIdentity(profile, stats));
     setRoomCode(code);
+    setNetworkStatus(`Room ${code} ready. Waiting for opponent...`);
     void refreshOpenLobbies();
     updateSettings(game.settings);
     setActiveTab("play");
   }
 
   async function refreshOpenLobbies(): Promise<void> {
-    setOpenLobbies(await listOpenLobbies());
+    const status = await fetchPresenceStatus();
+    setPresenceStatus(status);
+    setOpenLobbies(status.lobbies);
   }
 
   async function joinRoom(roomCodeOverride = joinCode) {
@@ -983,12 +1087,13 @@ function App() {
     setMatchMode("p2p");
     setPeerRole("guest");
     setOpponent(waitingIdentity);
+    setNetworkStatus(`Joining room ${codeToJoin}...`);
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
     bindPeerClient(client);
     client.onStatus((status) => {
-      setNetworkStatus(status);
+      setNetworkStatus(formatNetworkStatus(status));
       if (status === "P2P data channel open") {
         client.send("identity", makeIdentity(profile, stats));
       }
@@ -1025,7 +1130,7 @@ function App() {
         setLocalShield(0);
         setRemoteShield(0);
         setActiveTab("play");
-        setNetworkStatus("Host settings received. Click ships to rotate, then Ready.");
+        setNetworkStatus("Host settings received. Ready your fleet.");
         return;
       }
 
@@ -1041,14 +1146,14 @@ function App() {
         setRemoteBoardReady(payload.board);
         setRemoteReady(true);
         setGame((current) => ({ ...current, remoteBoard: payload.board }));
-        setNetworkStatus(peerRoleRef.current === "host" ? "Opponent ready. Start battle." : "Host is ready.");
+        setNetworkStatus(peerRoleRef.current === "host" ? "Opponent ready. Start P2P Battle." : "Host ready. Waiting for launch...");
         return;
       }
 
       if (message.type === "start") {
         matchRecordedRef.current = false;
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
-        setNetworkStatus("Battle started. Host fires first.");
+        setNetworkStatus("Battle live. Host fires first.");
         setActiveTab("play");
         return;
       }
@@ -1065,7 +1170,7 @@ function App() {
           setGame(nextState);
           endMatch("win", nextState);
         }
-        setNetworkStatus("Opponent left the game.");
+        setNetworkStatus("Peer left. Match closed.");
         return;
       }
 
@@ -1088,7 +1193,7 @@ function App() {
     }
     audio.play("turn", 0.45);
     setLocalReady(true);
-    setNetworkStatus(remoteReady ? "Both fleets ready." : "Fleet ready. Waiting for opponent.");
+    setNetworkStatus(remoteReady ? "Both fleets ready. Standing by for launch." : "Fleet locked. Waiting for opponent...");
     network.current?.send("ready", { board: game.localBoard } satisfies ReadyPayload);
   }
 
@@ -1099,7 +1204,7 @@ function App() {
     matchRecordedRef.current = false;
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
-    setNetworkStatus("Battle started. Your turn.");
+    setNetworkStatus("Battle live. Your turn.");
     setActiveTab("play");
   }
 
@@ -1289,6 +1394,10 @@ function App() {
             <UserRound size={18} />
             {profile.displayName}
           </button>
+          <div className="presence-chip" aria-label="Live site activity">
+            <span>{presenceStatus.onlinePlayers} online</span>
+            <small>{presenceStatus.activeGames} active games</small>
+          </div>
         </div>
       </header>
 
@@ -1352,7 +1461,7 @@ function App() {
                 <section className="panel p2p-ready-panel">
                   <div className="section-title">
                     <span>Multiplayer fleet</span>
-                    <small>{networkStatus}</small>
+                    <small className="console-status">{consoleStatus}</small>
                   </div>
                   {roomCode && (
                     <div className="setup-room-code">
@@ -1385,7 +1494,7 @@ function App() {
                     </div>
                     <div className={remoteReady ? "ready-pill ready" : "ready-pill"}>
                       <small>{opponent.displayName}</small>
-                      <strong>{remoteReady ? "Ready" : "Waiting"}</strong>
+                      <strong>{remoteReady ? "Ready" : waitingLabel}</strong>
                     </div>
                   </div>
                   <button className="primary" type="button" disabled={!placementReady || localReady} onClick={markReady}>
@@ -1541,6 +1650,7 @@ function App() {
           <section className="panel lobby-actions-panel">
             <div className="section-title">
               <span>P2P Lobby</span>
+              <small className="console-status">{consoleStatus}</small>
             </div>
             <button className="primary" type="button" onClick={() => void createRoom()}>Create Game</button>
             {roomCode && <div className="room-code">{roomCode}</div>}
@@ -1590,8 +1700,8 @@ function App() {
               <small>{lobbyOpponent.playerId}</small>
             </div>
             <div className="opponent-card">
-              <strong>{lobbyOpponent.displayName}</strong>
-              <span>{lobbyOpponent.playerId === waitingIdentity.playerId ? "Create or join a room to connect." : `${lobbyOpponent.statsSummary.games} games · ${lobbyOpponent.statsSummary.winRate}% win rate`}</span>
+              <strong>{lobbyOpponent.playerId === waitingIdentity.playerId ? `${waitingLabel} for opponent` : lobbyOpponent.displayName}</strong>
+              <span>{lobbyOpponent.playerId === waitingIdentity.playerId ? consoleStatus : `${lobbyOpponent.statsSummary.games} games · ${lobbyOpponent.statsSummary.winRate}% win rate`}</span>
             </div>
           </section>
         </div>

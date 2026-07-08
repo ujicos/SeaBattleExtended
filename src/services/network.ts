@@ -12,17 +12,67 @@ export interface LobbySummary {
   updatedAt: number;
 }
 
-export async function listOpenLobbies(signalingUrl = defaultSignalingUrl): Promise<LobbySummary[]> {
+export interface PresenceStatus {
+  onlinePlayers: number;
+  activeGames: number;
+  lobbies: LobbySummary[];
+}
+
+function signalingHttpUrl(pathname: string, signalingUrl = defaultSignalingUrl): URL {
   const url = new URL(signalingUrl);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  url.pathname = "/lobbies";
+  url.pathname = pathname;
   url.search = "";
+  return url;
+}
+
+export async function listOpenLobbies(signalingUrl = defaultSignalingUrl): Promise<LobbySummary[]> {
+  const url = signalingHttpUrl("/lobbies", signalingUrl);
   const response = await fetch(url.toString(), { cache: "no-store" });
   if (!response.ok) {
     return [];
   }
   const data = (await response.json()) as { lobbies?: LobbySummary[] };
   return data.lobbies ?? [];
+}
+
+export async function fetchPresenceStatus(signalingUrl = defaultSignalingUrl): Promise<PresenceStatus> {
+  const url = signalingHttpUrl("/status", signalingUrl);
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) {
+    return { onlinePlayers: 1, activeGames: 0, lobbies: [] };
+  }
+  const data = (await response.json()) as Partial<PresenceStatus>;
+  return {
+    onlinePlayers: data.onlinePlayers ?? 1,
+    activeGames: data.activeGames ?? data.lobbies?.length ?? 0,
+    lobbies: data.lobbies ?? []
+  };
+}
+
+export async function pingPresence(sessionId: string, signalingUrl = defaultSignalingUrl): Promise<PresenceStatus> {
+  const url = signalingHttpUrl("/presence", signalingUrl);
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId })
+  });
+  if (!response.ok) {
+    return fetchPresenceStatus(signalingUrl);
+  }
+  const data = (await response.json()) as Partial<PresenceStatus>;
+  return {
+    onlinePlayers: data.onlinePlayers ?? 1,
+    activeGames: data.activeGames ?? data.lobbies?.length ?? 0,
+    lobbies: data.lobbies ?? []
+  };
+}
+
+export function leavePresence(sessionId: string, signalingUrl = defaultSignalingUrl): void {
+  const url = signalingHttpUrl("/presence", signalingUrl);
+  url.searchParams.set("session", sessionId);
+  void fetch(url.toString(), { method: "DELETE", keepalive: true }).catch(() => undefined);
 }
 
 export class PeerGameClient {

@@ -21,6 +21,11 @@ interface LobbyRecord {
   updatedAt: number;
 }
 
+interface PresenceRecord {
+  sessionId: string;
+  updatedAt: number;
+}
+
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
     ...init,
@@ -61,7 +66,7 @@ export default {
       return serviceInfo(request);
     }
 
-    if (url.pathname === "/lobbies") {
+    if (url.pathname === "/lobbies" || url.pathname === "/presence" || url.pathname === "/status") {
       const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
       return registry.fetch(request);
     }
@@ -90,12 +95,17 @@ export default {
 
 export class LobbyRegistry {
   private readonly ttlMs = 12 * 60 * 1000;
+  private readonly presenceTtlMs = 75 * 1000;
 
   constructor(private readonly state: DurableObjectState) {
     void this.state.blockConcurrencyWhile(async () => {
       const stored = await this.state.storage.get<LobbyRecord[]>("lobbies");
       if (!stored) {
         await this.state.storage.put("lobbies", []);
+      }
+      const presence = await this.state.storage.get<PresenceRecord[]>("presence");
+      if (!presence) {
+        await this.state.storage.put("presence", []);
       }
     });
   }
@@ -105,10 +115,48 @@ export class LobbyRegistry {
       return new Response(null, {
         headers: {
           "access-control-allow-origin": "*",
-          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
           "access-control-allow-headers": "content-type"
         }
       });
+    }
+
+    const url = new URL(request.url);
+
+    if (url.pathname === "/presence") {
+      if (request.method === "DELETE") {
+        const sessionId = url.searchParams.get("session")?.trim();
+        if (sessionId) {
+          await this.removePresence(sessionId);
+        }
+        return json({ ok: true });
+      }
+
+      if (request.method !== "POST") {
+        const presence = await this.prunedPresence();
+        await this.state.storage.put("presence", presence);
+        return json({ ok: true, onlinePlayers: presence.length });
+      }
+
+      const body = (await request.json()) as { sessionId?: string };
+      const sessionId = body.sessionId?.trim();
+      if (!sessionId) {
+        return json({ ok: false, error: "Missing sessionId" }, { status: 400 });
+      }
+      const presence = await this.prunedPresence();
+      const next = [{ sessionId, updatedAt: Date.now() }, ...presence.filter((record) => record.sessionId !== sessionId)];
+      const lobbies = await this.prunedLobbies();
+      await this.state.storage.put("presence", next.slice(0, 500));
+      await this.state.storage.put("lobbies", lobbies);
+      return json({ ok: true, onlinePlayers: next.length, activeGames: lobbies.length, lobbies });
+    }
+
+    if (url.pathname === "/status") {
+      const lobbies = await this.prunedLobbies();
+      const presence = await this.prunedPresence();
+      await this.state.storage.put("lobbies", lobbies);
+      await this.state.storage.put("presence", presence);
+      return json({ ok: true, onlinePlayers: presence.length, activeGames: lobbies.length, lobbies });
     }
 
     if (request.method === "POST") {
@@ -132,6 +180,17 @@ export class LobbyRegistry {
     const now = Date.now();
     const lobbies = (await this.state.storage.get<LobbyRecord[]>("lobbies")) ?? [];
     return lobbies.filter((lobby) => now - lobby.updatedAt < this.ttlMs);
+  }
+
+  private async prunedPresence(): Promise<PresenceRecord[]> {
+    const now = Date.now();
+    const presence = (await this.state.storage.get<PresenceRecord[]>("presence")) ?? [];
+    return presence.filter((record) => now - record.updatedAt < this.presenceTtlMs);
+  }
+
+  private async removePresence(sessionId: string): Promise<void> {
+    const presence = await this.prunedPresence();
+    await this.state.storage.put("presence", presence.filter((record) => record.sessionId !== sessionId));
   }
 }
 

@@ -144,6 +144,14 @@ small,
   color: #a8c3c1;
 }
 
+.console-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #83e9dd;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  text-align: right;
+}
+
 .player-chip {
   min-height: 44px;
   padding: 0 12px;
@@ -154,6 +162,30 @@ small,
   color: #eef8f7;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.presence-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 104px;
+  padding: 7px 10px;
+  border: 1px solid rgba(72, 208, 187, 0.26);
+  border-radius: 12px;
+  color: #eef8f7;
+  background: rgba(72, 208, 187, 0.06);
+  font-size: 0.78rem;
+  line-height: 1.15;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.presence-chip span {
+  font-weight: 800;
+}
+
+.presence-chip small {
+  color: #9fbcb8;
+  font-size: 0.72rem;
 }
 
 .player-chip:hover,
@@ -1580,6 +1612,16 @@ select {
     max-width: 38vw;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .presence-chip {
+    min-width: 74px;
+    padding: 6px 8px;
+    font-size: 0.7rem;
+  }
+
+  .presence-chip small {
+    font-size: 0.64rem;
   }
 
   .content-grid,
