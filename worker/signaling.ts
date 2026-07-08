@@ -56,7 +56,7 @@ export default {
       return new Response(null, {
         headers: {
           "access-control-allow-origin": "*",
-          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
           "access-control-allow-headers": "content-type"
         }
       });
@@ -84,6 +84,11 @@ export default {
       await registry.fetch("https://registry/lobbies", {
         method: "POST",
         body: JSON.stringify({ roomCode })
+      });
+    } else {
+      const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
+      await registry.fetch(`https://registry/lobbies?room=${encodeURIComponent(roomCode)}`, {
+        method: "DELETE"
       });
     }
 
@@ -171,6 +176,14 @@ export class LobbyRegistry {
       return json({ ok: true });
     }
 
+    if (request.method === "DELETE") {
+      const roomCode = url.searchParams.get("room")?.trim().toUpperCase();
+      if (roomCode) {
+        await this.removeLobby(roomCode);
+      }
+      return json({ ok: true });
+    }
+
     const lobbies = await this.prunedLobbies();
     await this.state.storage.put("lobbies", lobbies);
     return json({ ok: true, lobbies });
@@ -191,6 +204,11 @@ export class LobbyRegistry {
   private async removePresence(sessionId: string): Promise<void> {
     const presence = await this.prunedPresence();
     await this.state.storage.put("presence", presence.filter((record) => record.sessionId !== sessionId));
+  }
+
+  private async removeLobby(roomCode: string): Promise<void> {
+    const lobbies = await this.prunedLobbies();
+    await this.state.storage.put("lobbies", lobbies.filter((lobby) => lobby.roomCode !== roomCode));
   }
 }
 

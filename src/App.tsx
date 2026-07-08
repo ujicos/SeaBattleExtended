@@ -1283,6 +1283,14 @@ function App() {
 
     const shot = receiveShot(current.localBoard, coord);
     if (shot.result === "duplicate") {
+      network.current?.send("shot-result", {
+        coord,
+        result: "duplicate",
+        board: current.localBoard,
+        nextTurn: "remote",
+        winner: null,
+        defenderShield: localShieldRef.current
+      } satisfies ShotResultPayload);
       return;
     }
     playAttackVisual("local", coord, shot.result, OPPONENT_SOUND_VOLUME);
@@ -1398,6 +1406,10 @@ function App() {
           </div>
         </button>
         <div className="top-actions">
+          <div className="presence-chip" aria-label="Live site activity">
+            <span>{presenceStatus.onlinePlayers} online</span>
+            <small>{presenceStatus.activeGames} active games</small>
+          </div>
           <button
             className="player-chip"
             type="button"
@@ -1409,10 +1421,6 @@ function App() {
             <UserRound size={18} />
             {profile.displayName}
           </button>
-          <div className="presence-chip" aria-label="Live site activity">
-            <span>{presenceStatus.onlinePlayers} online</span>
-            <small>{presenceStatus.activeGames} active games</small>
-          </div>
         </div>
       </header>
 
