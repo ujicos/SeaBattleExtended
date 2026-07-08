@@ -56,22 +56,21 @@ function makeShareLink(roomCode: string): string {
 
 function pickOpenShot(board: BoardState): Coordinate | null {
   const totalCells = board.size * board.size;
-  for (let attempt = 0; attempt < totalCells * 2; attempt += 1) {
-    const index = Math.floor(Math.random() * totalCells);
-    const coord = { row: Math.floor(index / board.size), col: index % board.size };
-    if (!board.shots[coordKey(coord)]) {
-      return coord;
-    }
-  }
+  let picked: Coordinate | null = null;
+  let openCount = 0;
 
   for (let index = 0; index < totalCells; index += 1) {
     const coord = { row: Math.floor(index / board.size), col: index % board.size };
-    if (!board.shots[coordKey(coord)]) {
-      return coord;
+    if (board.shots[coordKey(coord)]) {
+      continue;
+    }
+    openCount += 1;
+    if (Math.floor(Math.random() * openCount) === 0) {
+      picked = coord;
     }
   }
 
-  return null;
+  return picked;
 }
 
 type MatchMode = "practice" | "p2p";

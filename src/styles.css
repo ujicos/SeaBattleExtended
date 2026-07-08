@@ -12,8 +12,8 @@
   --accent-2: #f2c66d;
   --danger: #ff657c;
   --water: #123f58;
-  --glass-blur: 12px;
-  --panel-shadow: 0 14px 42px rgba(0, 0, 0, 0.2);
+  --glass-blur: 18px;
+  --panel-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
 }
 
 * {
@@ -1046,7 +1046,7 @@ select {
   z-index: 10;
   border-radius: 16px;
   background: rgba(4, 12, 17, 0.78);
-  backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(10px);
 }
 
 .board-stage-wrap .result button {
@@ -1330,11 +1330,6 @@ select {
 }
 
 @media (max-width: 760px) {
-  :root {
-    --glass-blur: 8px;
-    --panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-  }
-
   .app-shell {
     width: min(1180px, 100%);
     padding-inline: 10px;
