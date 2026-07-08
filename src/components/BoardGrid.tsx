@@ -1,5 +1,6 @@
 import { ChevronDown, Waves } from "lucide-react";
-import { coordKey, findShipAt, getShipBufferCells, getVisibleCell, isShipSunk } from "../game/board";
+import { memo, useMemo } from "react";
+import { coordKey, getShipBufferCells, getShipCells, isShipSunk } from "../game/board";
 import type { BoardState, Coordinate, Orientation, PlacedShip, ShipDefinition, ShotResult } from "../types/game";
 
 export interface AttackAnimation {
@@ -87,7 +88,7 @@ function ShipSprite({ ship, coord, destroyed }: ShipSpriteProps) {
   );
 }
 
-export function BoardGrid({
+export const BoardGrid = memo(function BoardGrid({
   board,
   revealShips,
   interactive = false,
@@ -102,21 +103,40 @@ export function BoardGrid({
   expanded = true,
   onToggleExpand
 }: BoardGridProps) {
-  const previewMap = new Map(preview?.cells.map((cell) => [coordKey(cell), preview.valid ? "valid" : "invalid"]));
-  const sunkBufferMap = new Map<string, true>();
-  const sunkShipMap = new Map<string, true>();
-  for (const ship of board.ships.filter(isShipSunk)) {
-    for (const cell of getShipBufferCells(ship, board.size)) {
-      sunkBufferMap.set(coordKey(cell), true);
+  const previewMap = useMemo(
+    () => new Map(preview?.cells.map((cell) => [coordKey(cell), preview.valid ? "valid" : "invalid"])),
+    [preview]
+  );
+  const { shipByCell, sunkBufferMap, sunkShipMap } = useMemo(() => {
+    const nextShipByCell = new Map<string, PlacedShip>();
+    const nextSunkBufferMap = new Map<string, true>();
+    const nextSunkShipMap = new Map<string, true>();
+
+    for (const ship of board.ships) {
+      for (const cell of getShipCells(ship)) {
+        nextShipByCell.set(coordKey(cell), ship);
+      }
+      if (!isShipSunk(ship)) {
+        continue;
+      }
+      for (const cell of getShipBufferCells(ship, board.size)) {
+        nextSunkBufferMap.set(coordKey(cell), true);
+      }
+      for (const cell of ship.hits) {
+        nextSunkShipMap.set(coordKey(cell), true);
+      }
     }
-    for (const cell of ship.hits) {
-      sunkShipMap.set(coordKey(cell), true);
-    }
-  }
-  const cells = Array.from({ length: board.size * board.size }, (_, index) => ({
-    row: Math.floor(index / board.size),
-    col: index % board.size
-  }));
+
+    return { shipByCell: nextShipByCell, sunkBufferMap: nextSunkBufferMap, sunkShipMap: nextSunkShipMap };
+  }, [board]);
+  const cells = useMemo(
+    () =>
+      Array.from({ length: board.size * board.size }, (_, index) => ({
+        row: Math.floor(index / board.size),
+        col: index % board.size
+      })),
+    [board.size]
+  );
 
   const showGrid = !collapsible || expanded;
 
@@ -163,15 +183,17 @@ export function BoardGrid({
             </div>
           )}
           {cells.map((coord) => {
-            const value = getVisibleCell(board, coord, revealShips);
-            const ship = revealShips || value === "hit" || value === "sunk" ? findShipAt(board, coord) : undefined;
             const key = coordKey(coord);
+            const shot = board.shots[key];
+            const ship = shipByCell.get(key);
+            const value: "empty" | "ship" | ShotResult = shot ?? (revealShips && ship ? "ship" : "empty");
             const activeImpact = attackAnimation && coordKey(attackAnimation.coord) === key && attackAnimation.result !== "miss";
             const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
             const sunkBuffer = sunkBufferMap.has(key);
             const sunkShip = sunkShipMap.has(key);
             const blocked = interactive && sunkBuffer && !sunkShip;
             const selected = selectedCoord && coordKey(selectedCoord) === key;
+            const showShipSprite = Boolean(ship && ((!shot && revealShips) || sunkShip));
 
             return (
               <button
@@ -184,7 +206,7 @@ export function BoardGrid({
                 onPointerDown={() => onCellPress?.(coord)}
               >
                 {value === "miss" && <Waves size={13} />}
-                {ship && (value === "ship" || sunkShip) && (
+                {showShipSprite && ship && (
                   <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
                 )}
                 {activeImpact && <span className="blast" />}
@@ -196,4 +218,4 @@ export function BoardGrid({
       )}
     </section>
   );
-}
+});

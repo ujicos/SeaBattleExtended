@@ -1023,8 +1023,8 @@ function App() {
       )}
 
       {activeTab === "lobby" && (
-        <div className="content-grid">
-          <section className="panel">
+        <div className="content-grid lobby-grid">
+          <section className="panel lobby-actions-panel">
             <div className="section-title">
               <span>P2P Lobby</span>
               <small>{networkStatus}</small>
@@ -1074,7 +1074,7 @@ function App() {
               )}
             </div>
           </section>
-          <section className="panel">
+          <section className="panel lobby-opponent-panel">
             <div className="section-title">
               <span>Opponent</span>
               <small>{lobbyOpponent.playerId}</small>
