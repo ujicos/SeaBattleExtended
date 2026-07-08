@@ -61,6 +61,14 @@ const defaultStats: PlayerStats = {
   history: []
 };
 
+export function makeEmptyStats(): PlayerStats {
+  return {
+    ...defaultStats,
+    opponents: {},
+    history: []
+  };
+}
+
 function safeParse<T>(value: string | null, fallback: T): T {
   if (!value) {
     return fallback;

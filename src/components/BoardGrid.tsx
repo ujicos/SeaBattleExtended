@@ -166,6 +166,7 @@ export function BoardGrid({
             const value = getVisibleCell(board, coord, revealShips);
             const ship = revealShips || value === "hit" || value === "sunk" ? findShipAt(board, coord) : undefined;
             const key = coordKey(coord);
+            const activeImpact = attackAnimation && coordKey(attackAnimation.coord) === key && attackAnimation.result !== "miss";
             const previewState = previewMap.get(key) as "valid" | "invalid" | undefined;
             const sunkBuffer = sunkBufferMap.has(key);
             const sunkShip = sunkShipMap.has(key);
@@ -186,8 +187,8 @@ export function BoardGrid({
                 {ship && (value === "ship" || sunkShip) && (
                   <ShipSprite ship={ship} coord={coord} destroyed={sunkShip} />
                 )}
-                {(value === "hit" || value === "sunk") && <span className="blast" />}
-                {value === "hit" && <span className="smoke" />}
+                {activeImpact && <span className="blast" />}
+                {(value === "hit" || sunkShip) && <span className="fire-glow" />}
               </button>
             );
           })}

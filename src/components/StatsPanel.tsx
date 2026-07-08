@@ -13,7 +13,15 @@ function duration(ms: number | null): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-export function StatsPanel({ stats, onRemoveMatch }: { stats: PlayerStats; onRemoveMatch?: (matchId: string) => void }) {
+export function StatsPanel({
+  stats,
+  onRemoveMatch,
+  onResetStats
+}: {
+  stats: PlayerStats;
+  onRemoveMatch?: (matchId: string) => void;
+  onResetStats?: () => void;
+}) {
   const statCards = [
     ["Games", stats.totalGames],
     ["Wins", stats.wins],
@@ -32,6 +40,11 @@ export function StatsPanel({ stats, onRemoveMatch }: { stats: PlayerStats; onRem
         <span>Statistics</span>
         <small>Local only</small>
       </div>
+      {onResetStats && (
+        <button className="secondary reset-stats-button" type="button" onClick={onResetStats}>
+          Reset stats
+        </button>
+      )}
       <div className="stats-grid">
         {statCards.map(([label, value]) => (
           <div className="stat" key={label}>

@@ -19,16 +19,3 @@ export function createAnimation(kind: AnimationKind, duration = 650): TimedAnima
     duration
   };
 }
-
-export function rafLoop(onFrame: (deltaMs: number, now: number) => void): () => void {
-  let frame = 0;
-  let previous = performance.now();
-  const tick = (now: number) => {
-    const delta = now - previous;
-    previous = now;
-    onFrame(delta, now);
-    frame = requestAnimationFrame(tick);
-  };
-  frame = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(frame);
-}
