@@ -129,7 +129,7 @@ VITE_SIGNALING_URL=wss://your-signaling-host.example npm run build
 
 ## Implemented
 
-- Configurable board presets with scaled fleets: 8x8, 9x9, 10x10, 12x12, 14x14, 16x16, and Large Battle 32x32.
+- Configurable board presets with scaled fleets: 8x8, 9x9, 10x10, 12x12, 14x14, 16x16, and Large Battle 24x24.
 - Rule engine with horizontal/vertical ships, no overlap, and a one-cell buffer including diagonals.
 - Classic combat: miss ends turn, hit/sunk keeps turn, all ships sunk wins.
 - Touch/mouse ship placement, rotate, hover preview, and repeatable shuffle.

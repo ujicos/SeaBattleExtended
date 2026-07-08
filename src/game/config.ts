@@ -105,19 +105,18 @@ export const boardConfigs: BoardConfig[] = [
     ]
   },
   {
-    id: "extended-32",
-    label: "Large Battle 32x32",
-    size: 32,
+    id: "extended-24",
+    label: "Large Battle 24x24",
+    size: 24,
     fleet: [
-      ...ships("Titan Carrier", 12),
-      ...ships("Super Battleship", 10),
-      ...ships("Heavy Cruiser", 8, 2),
-      ...ships("Cruiser", 6, 3),
-      ...ships("Submarine", 5, 3),
-      ...ships("Destroyer", 4, 4),
-      ...ships("Patrol Boat", 3, 4),
-      ...ships("Interceptor", 2, 6),
-      ...ships("Scout Boat", 1, 12)
+      ...ships("Titan Carrier", 9),
+      ...ships("Super Battleship", 8),
+      ...ships("Heavy Cruiser", 6, 2),
+      ...ships("Cruiser", 5, 3),
+      ...ships("Submarine", 4, 3),
+      ...ships("Destroyer", 3, 4),
+      ...ships("Patrol Boat", 2, 5),
+      ...ships("Scout Boat", 1, 10)
     ]
   }
 ];

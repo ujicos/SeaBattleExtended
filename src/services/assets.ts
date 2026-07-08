@@ -27,21 +27,23 @@ export const assetManifest: AssetEntry[] = [
 ];
 
 export class AssetManager {
-  private readonly cache = new Map<string, HTMLImageElement | HTMLAudioElement>();
+  private readonly cache = new Map<string, HTMLImageElement>();
 
-  get(key: string): HTMLImageElement | HTMLAudioElement | undefined {
+  get(key: string): HTMLImageElement | undefined {
     return this.cache.get(key);
+  }
+
+  getPath(key: string): string | undefined {
+    return assetManifest.find((entry) => entry.key === key)?.path;
   }
 
   preload(entries = assetManifest): void {
     for (const entry of entries) {
-      if (this.cache.has(entry.key)) {
+      if (entry.kind === "audio" || this.cache.has(entry.key)) {
         continue;
       }
-      const element = entry.kind === "audio" ? new Audio(entry.path) : new Image();
-      if (entry.kind !== "audio") {
-        (element as HTMLImageElement).src = entry.path;
-      }
+      const element = new Image();
+      element.src = entry.path;
       this.cache.set(entry.key, element);
     }
   }

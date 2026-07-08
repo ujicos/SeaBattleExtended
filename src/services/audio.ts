@@ -3,6 +3,8 @@ import { assets } from "./assets";
 export class AudioManager {
   private enabled = true;
   private context: AudioContext | null = null;
+  private readonly buffers = new Map<string, AudioBuffer>();
+  private readonly pendingBuffers = new Map<string, Promise<AudioBuffer | null>>();
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -16,12 +18,71 @@ export class AudioManager {
       this.playTurnCue(volume);
       return;
     }
-    const asset = assets.get(key);
-    if (asset instanceof HTMLAudioElement) {
-      asset.currentTime = 0;
-      asset.volume = Math.max(0, Math.min(1, volume));
-      void asset.play().catch(() => undefined);
+    void this.playBuffer(key, volume);
+  }
+
+  private async getContext(): Promise<AudioContext | null> {
+    try {
+      this.context ??= new AudioContext();
+      if (this.context.state === "suspended") {
+        await this.context.resume();
+      }
+      return this.context;
+    } catch {
+      return null;
     }
+  }
+
+  private loadBuffer(key: string): Promise<AudioBuffer | null> {
+    const existing = this.buffers.get(key);
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+
+    const pending = this.pendingBuffers.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    const path = assets.getPath(key);
+    if (!path) {
+      return Promise.resolve(null);
+    }
+
+    const request = (async () => {
+      const context = await this.getContext();
+      if (!context) {
+        return null;
+      }
+      const response = await fetch(path);
+      const data = await response.arrayBuffer();
+      const buffer = await context.decodeAudioData(data);
+      this.buffers.set(key, buffer);
+      this.pendingBuffers.delete(key);
+      return buffer;
+    })().catch(() => {
+      this.pendingBuffers.delete(key);
+      return null;
+    });
+
+    this.pendingBuffers.set(key, request);
+    return request;
+  }
+
+  private async playBuffer(key: string, volume: number): Promise<void> {
+    const context = await this.getContext();
+    const buffer = await this.loadBuffer(key);
+    if (!context || !buffer || !this.enabled) {
+      return;
+    }
+
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    gain.gain.value = Math.max(0, Math.min(1, volume));
+    source.connect(gain);
+    gain.connect(context.destination);
+    source.start();
   }
 
   private playTurnCue(volume: number): void {

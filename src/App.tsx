@@ -10,7 +10,7 @@ import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { assets } from "./services/assets";
 import { audio } from "./services/audio";
-import { PeerGameClient } from "./services/network";
+import { listOpenLobbies, PeerGameClient, type LobbySummary } from "./services/network";
 import {
   loadProfile,
   loadStats,
@@ -103,6 +103,7 @@ function App() {
   const [copyNotice, setCopyNotice] = useState("");
   const [fleetPanelExpanded, setFleetPanelExpanded] = useState(false);
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
+  const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -291,6 +292,12 @@ function App() {
   useEffect(() => {
     saveStats(stats);
   }, [stats]);
+
+  useEffect(() => {
+    if (activeTab === "lobby") {
+      void refreshOpenLobbies();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (game.phase !== "battle" || !game.settings.blitz.enabled) {
@@ -524,8 +531,13 @@ function App() {
     });
     const code = await client.createRoom(makeIdentity(profile, stats));
     setRoomCode(code);
+    void refreshOpenLobbies();
     updateSettings(game.settings);
     setActiveTab("play");
+  }
+
+  async function refreshOpenLobbies(): Promise<void> {
+    setOpenLobbies(await listOpenLobbies());
   }
 
   async function joinRoom() {
@@ -1000,6 +1012,32 @@ function App() {
               <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="ABC123" />
             </label>
             <button className="secondary" type="button" onClick={() => void joinRoom()}>Join Game</button>
+            <div className="open-lobbies">
+              <div className="section-title">
+                <span>Open lobbies</span>
+                <button className="secondary compact-action" type="button" onClick={() => void refreshOpenLobbies()}>
+                  Refresh
+                </button>
+              </div>
+              {openLobbies.length ? (
+                openLobbies.map((lobby) => (
+                  <button
+                    className="lobby-row"
+                    type="button"
+                    key={lobby.roomCode}
+                    onClick={() => {
+                      setJoinCode(lobby.roomCode);
+                      setRoomCode(lobby.roomCode);
+                    }}
+                  >
+                    <strong>{lobby.roomCode}</strong>
+                    <small>{Math.max(0, Math.round((Date.now() - lobby.updatedAt) / 60000))}m ago</small>
+                  </button>
+                ))
+              ) : (
+                <small>No open lobbies found.</small>
+              )}
+            </div>
           </section>
           <section className="panel">
             <div className="section-title">

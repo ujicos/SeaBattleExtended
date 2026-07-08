@@ -1,5 +1,6 @@
 interface Env {
   ROOMS: DurableObjectNamespace;
+  LOBBIES: DurableObjectNamespace;
 }
 
 interface JoinMessage {
@@ -13,6 +14,11 @@ interface ClientInfo {
   roomCode: string;
   role: "host" | "guest";
   identity?: unknown;
+}
+
+interface LobbyRecord {
+  roomCode: string;
+  updatedAt: number;
 }
 
 function json(data: unknown, init?: ResponseInit): Response {
@@ -55,6 +61,11 @@ export default {
       return serviceInfo(request);
     }
 
+    if (url.pathname === "/lobbies") {
+      const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
+      return registry.fetch(request);
+    }
+
     if (request.headers.get("upgrade") !== "websocket") {
       return serviceInfo(request);
     }
@@ -63,11 +74,66 @@ export default {
       return json({ ok: false, error: "Missing ?room=CODE" }, { status: 400 });
     }
 
+    if (url.searchParams.get("role") !== "guest") {
+      const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
+      await registry.fetch("https://registry/lobbies", {
+        method: "POST",
+        body: JSON.stringify({ roomCode })
+      });
+    }
+
     const roomId = env.ROOMS.idFromName(roomCode);
     const room = env.ROOMS.get(roomId);
     return room.fetch(request);
   }
 };
+
+export class LobbyRegistry {
+  private readonly ttlMs = 12 * 60 * 1000;
+
+  constructor(private readonly state: DurableObjectState) {
+    void this.state.blockConcurrencyWhile(async () => {
+      const stored = await this.state.storage.get<LobbyRecord[]>("lobbies");
+      if (!stored) {
+        await this.state.storage.put("lobbies", []);
+      }
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-headers": "content-type"
+        }
+      });
+    }
+
+    if (request.method === "POST") {
+      const body = (await request.json()) as { roomCode?: string };
+      const roomCode = body.roomCode?.trim().toUpperCase();
+      if (!roomCode) {
+        return json({ ok: false, error: "Missing roomCode" }, { status: 400 });
+      }
+      const lobbies = await this.prunedLobbies();
+      const next = [{ roomCode, updatedAt: Date.now() }, ...lobbies.filter((lobby) => lobby.roomCode !== roomCode)].slice(0, 30);
+      await this.state.storage.put("lobbies", next);
+      return json({ ok: true });
+    }
+
+    const lobbies = await this.prunedLobbies();
+    await this.state.storage.put("lobbies", lobbies);
+    return json({ ok: true, lobbies });
+  }
+
+  private async prunedLobbies(): Promise<LobbyRecord[]> {
+    const now = Date.now();
+    const lobbies = (await this.state.storage.get<LobbyRecord[]>("lobbies")) ?? [];
+    return lobbies.filter((lobby) => now - lobby.updatedAt < this.ttlMs);
+  }
+}
 
 export class SignalingRoom {
   private readonly sessions = new Map<WebSocket, ClientInfo>();

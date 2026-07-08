@@ -3,6 +3,28 @@ import type { NetworkMessage, PeerIdentity } from "../types/game";
 type Listener = (message: NetworkMessage) => void;
 type StatusListener = (status: string) => void;
 
+const defaultSignalingUrl =
+  import.meta.env.VITE_SIGNALING_URL ??
+  "wss://seabattle-extended.yohabbodude.workers.dev";
+
+export interface LobbySummary {
+  roomCode: string;
+  updatedAt: number;
+}
+
+export async function listOpenLobbies(signalingUrl = defaultSignalingUrl): Promise<LobbySummary[]> {
+  const url = new URL(signalingUrl);
+  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  url.pathname = "/lobbies";
+  url.search = "";
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) {
+    return [];
+  }
+  const data = (await response.json()) as { lobbies?: LobbySummary[] };
+  return data.lobbies ?? [];
+}
+
 export class PeerGameClient {
   private socket: WebSocket | null = null;
   private peer: RTCPeerConnection | null = null;
@@ -11,11 +33,10 @@ export class PeerGameClient {
   private statusListeners = new Set<StatusListener>();
   private seenMessages = new Set<string>();
   private pendingMessages: NetworkMessage[] = [];
+  private pendingSignals: unknown[] = [];
 
   constructor(
-    private readonly signalingUrl =
-      import.meta.env.VITE_SIGNALING_URL ??
-      "wss://seabattle-extended.yohabbodude.workers.dev"
+    private readonly signalingUrl = defaultSignalingUrl
   ) {}
 
   onMessage(listener: Listener): () => void {
@@ -121,6 +142,8 @@ export class PeerGameClient {
     } else {
       this.peer.ondatachannel = (event) => this.bindChannel(event.channel);
     }
+
+    await this.flushPendingSignals();
   }
 
   private bindChannel(channel: RTCDataChannel): void {
@@ -135,6 +158,12 @@ export class PeerGameClient {
     this.channel.onmessage = (event) => this.emitMessage(JSON.parse(event.data) as NetworkMessage);
   }
 
+  private async flushPendingSignals(): Promise<void> {
+    for (const signal of this.pendingSignals.splice(0)) {
+      await this.handleSignal(signal);
+    }
+  }
+
   private async handleSignal(signal: any): Promise<void> {
     if (signal.type === "peer-joined" && signal.identity) {
       this.emitMessage({
@@ -147,6 +176,7 @@ export class PeerGameClient {
     }
 
     if (!this.peer) {
+      this.pendingSignals.push(signal);
       return;
     }
 

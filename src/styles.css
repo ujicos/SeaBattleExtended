@@ -408,17 +408,24 @@ select {
   z-index: 1;
   display: grid;
   place-items: center;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  contain: layout paint size;
   border: 0;
   background: var(--water);
   color: #cffbf3;
   padding: 0;
+  line-height: 1;
 }
 
 .cell > svg {
   position: relative;
   z-index: 2;
+  width: min(62%, 18px);
+  height: min(62%, 18px);
 }
 
 .cell:disabled {
@@ -730,6 +737,22 @@ select {
 .attack-bottom-top .bomb {
   top: var(--cell-center-y);
   left: var(--cell-center-x);
+}
+
+.attack-left-right .bomb {
+  animation-name: bomb-drop-left-right;
+}
+
+.attack-right-left .bomb {
+  animation-name: bomb-drop-right-left;
+}
+
+.attack-top-bottom .bomb {
+  animation-name: bomb-drop-top-bottom;
+}
+
+.attack-bottom-top .bomb {
+  animation-name: bomb-drop-bottom-top;
 }
 
 .battle-status {
@@ -1117,6 +1140,38 @@ select {
   white-space: nowrap;
 }
 
+.open-lobbies {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.open-lobbies .section-title {
+  margin-bottom: 0;
+}
+
+.open-lobbies .section-title button {
+  margin-left: auto;
+}
+
+.lobby-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+
+.lobby-row strong {
+  letter-spacing: 0.08em;
+}
+
 .copy-toast {
   position: fixed;
   right: max(18px, env(safe-area-inset-right));
@@ -1353,11 +1408,68 @@ select {
   }
 }
 
-@keyframes bomb-drop {
+@keyframes bomb-drop-left-right {
+  0%,
+  44% {
+    opacity: 0;
+    transform: translate(-260%, -50%) scale(0.6);
+  }
+  45% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes bomb-drop-right-left {
+  0%,
+  44% {
+    opacity: 0;
+    transform: translate(160%, -50%) scale(0.6);
+  }
+  45% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes bomb-drop-top-bottom {
   0%,
   44% {
     opacity: 0;
     transform: translate(-50%, -260%) scale(0.6);
+  }
+  45% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes bomb-drop-bottom-top {
+  0%,
+  44% {
+    opacity: 0;
+    transform: translate(-50%, 160%) scale(0.6);
   }
   45% {
     opacity: 1;
