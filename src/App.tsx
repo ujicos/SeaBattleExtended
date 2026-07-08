@@ -1,5 +1,5 @@
 import { Anchor, BarChart3, ChevronDown, Crown, Music2, Radio, Settings, Shield, Trophy, UserRound, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BoardGrid, isSunkBufferCoord } from "./components/BoardGrid";
 import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
@@ -52,6 +52,26 @@ function makeShareLink(roomCode: string): string {
   url.searchParams.set("room", roomCode);
   url.hash = "";
   return url.toString();
+}
+
+function pickOpenShot(board: BoardState): Coordinate | null {
+  const totalCells = board.size * board.size;
+  for (let attempt = 0; attempt < totalCells * 2; attempt += 1) {
+    const index = Math.floor(Math.random() * totalCells);
+    const coord = { row: Math.floor(index / board.size), col: index % board.size };
+    if (!board.shots[coordKey(coord)]) {
+      return coord;
+    }
+  }
+
+  for (let index = 0; index < totalCells; index += 1) {
+    const coord = { row: Math.floor(index / board.size), col: index % board.size };
+    if (!board.shots[coordKey(coord)]) {
+      return coord;
+    }
+  }
+
+  return null;
 }
 
 type MatchMode = "practice" | "p2p";
@@ -134,13 +154,16 @@ function App() {
   const battleLeadLabel = leadingSide === "local" ? profile.displayName : leadingSide === "remote" ? opponent.displayName : "tied";
   const leadDifference = Math.abs(enemyShipsSunk - localShipsSunk);
   const crownScale = leadingSide === "remote" ? 0.88 : leadingSide === "local" ? 1 + Math.min(leadDifference, 8) * 0.045 : 1;
-  const preview =
-    hovered && selectedShip && game.phase === "placing"
-      ? {
-          cells: getShipCells({ ...selectedShip, origin: hovered, orientation }),
-          valid: canPlaceShip(game.localBoard, selectedShip, hovered, orientation, selectedShip.id)
-        }
-      : null;
+  const preview = useMemo(
+    () =>
+      hovered && selectedShip && game.phase === "placing"
+        ? {
+            cells: getShipCells({ ...selectedShip, origin: hovered, orientation }),
+            valid: canPlaceShip(game.localBoard, selectedShip, hovered, orientation, selectedShip.id)
+          }
+        : null,
+    [game.localBoard, game.phase, hovered, orientation, selectedShip]
+  );
 
   useEffect(() => {
     gameRef.current = game;
@@ -380,7 +403,7 @@ function App() {
     }
   }
 
-  function placeSelectedShip(coord: Coordinate) {
+  const placeSelectedShip = useCallback((coord: Coordinate) => {
     if (game.phase !== "placing" || localReady) {
       return;
     }
@@ -413,7 +436,7 @@ function App() {
         selectedShipId: nextSelected
       };
     });
-  }
+  }, [game.localBoard, game.phase, localReady, orientation, selectedShip]);
 
   function shuffle() {
     const board = randomizeFleet(config);
@@ -429,7 +452,7 @@ function App() {
     setGame((current) => startBattle(current, remoteBoard));
   }
 
-  function selectTarget(coord: Coordinate) {
+  const selectTarget = useCallback((coord: Coordinate) => {
     if (game.phase !== "battle" || game.turn !== "local") {
       return;
     }
@@ -437,9 +460,9 @@ function App() {
       return;
     }
     setSelectedTarget(coord);
-  }
+  }, [game.phase, game.remoteBoard, game.turn]);
 
-  function fireSelectedTarget() {
+  const fireSelectedTarget = useCallback(() => {
     if (!selectedTarget) {
       return;
     }
@@ -448,7 +471,7 @@ function App() {
       return;
     }
     fire(selectedTarget);
-  }
+  }, [game.remoteBoard, selectedTarget]);
 
   function fire(coord: Coordinate) {
     if (game.turn !== "local") {
@@ -479,11 +502,7 @@ function App() {
   }
 
   function remoteTurn(currentGame = game) {
-    const openCells = Array.from({ length: config.size * config.size }, (_, index) => ({
-      row: Math.floor(index / config.size),
-      col: index % config.size
-    })).filter((coord) => !currentGame.localBoard.shots[`${coord.row}:${coord.col}`]);
-    const pick = openCells[Math.floor(Math.random() * openCells.length)];
+    const pick = pickOpenShot(currentGame.localBoard);
     if (!pick) {
       return;
     }
