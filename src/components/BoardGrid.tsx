@@ -22,6 +22,8 @@ interface BoardGridProps {
   onCellHover?: (coord: Coordinate | null) => void;
   preview?: { cells: Coordinate[]; valid: boolean } | null;
   attackAnimation?: AttackAnimation | null;
+  fogActive?: boolean;
+  stormPhase?: "clear" | "warning" | "wave";
   compact?: boolean;
   label: string;
   collapsible?: boolean;
@@ -98,6 +100,8 @@ export const BoardGrid = memo(function BoardGrid({
   onCellHover,
   preview,
   attackAnimation,
+  fogActive = false,
+  stormPhase = "clear",
   compact = false,
   label,
   collapsible = false,
@@ -198,7 +202,7 @@ export const BoardGrid = memo(function BoardGrid({
       )}
       {showGrid && (
         <div
-          className="board-grid"
+          className={`board-grid${fogActive ? " fog-active" : ""}${stormPhase !== "clear" ? ` storm-${stormPhase}` : ""}`}
           style={{ "--board-size": board.size } as React.CSSProperties}
           onPointerMove={handleTouchMove}
           onPointerUp={handleTouchEnd}
@@ -225,6 +229,8 @@ export const BoardGrid = memo(function BoardGrid({
               <span className="impact" />
             </div>
           )}
+          {fogActive && <div className="fog-tide" aria-hidden="true" />}
+          {stormPhase !== "clear" && <div className="storm-front" aria-hidden="true" />}
           {cells.map((coord) => {
             const key = coordKey(coord);
             const shot = board.shots[key];

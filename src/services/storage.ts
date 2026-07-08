@@ -31,6 +31,7 @@ export interface PlayerStats {
   xp: number;
   lifetimeXp: number;
   prestige: number;
+  achievements: Record<string, string>;
   fastestWinMs: number | null;
   longestGameMs: number | null;
   opponents: Record<
@@ -61,6 +62,7 @@ const defaultStats: PlayerStats = {
   xp: 0,
   lifetimeXp: 0,
   prestige: 0,
+  achievements: {},
   fastestWinMs: null,
   longestGameMs: null,
   opponents: {},
@@ -77,9 +79,26 @@ export const xpAwards = {
   loss: 90
 } as const;
 
+export interface AchievementDefinition {
+  id: string;
+  title: string;
+  description: string;
+  hidden?: boolean;
+}
+
+export const achievements: AchievementDefinition[] = [
+  { id: "first_hit", title: "First Blood", description: "Land your first hit." },
+  { id: "first_sink", title: "Shipbreaker", description: "Sink your first ship." },
+  { id: "first_win", title: "Captain's Mark", description: "Win your first match." },
+  { id: "fog_hit", title: "Through the Fog", description: "Hit a ship during Fog Tide.", hidden: true },
+  { id: "storm_chaser", title: "Storm Chaser", description: "Have a ship moved by Storm Mode.", hidden: true },
+  { id: "prestige_1", title: "Prestige Captain", description: "Prestige for the first time.", hidden: true }
+];
+
 export function makeEmptyStats(): PlayerStats {
   return {
     ...defaultStats,
+    achievements: {},
     opponents: {},
     history: []
   };
@@ -90,7 +109,8 @@ export function xpForRank(rank: number): number {
     return 0;
   }
   const capped = Math.min(rank, maxRank);
-  return Math.round((capped - 1) * 180 + (capped - 1) ** 2 * 28);
+  const completedRanks = capped - 1;
+  return Math.round(completedRanks ** 2 * 170 + completedRanks * 80);
 }
 
 export function getRankProgress(xp: number): { rank: number; currentXp: number; nextXp: number; progress: number } {
@@ -128,10 +148,31 @@ export function prestigeStats(stats: PlayerStats): PlayerStats {
   if (getRankProgress(stats.xp).rank < maxRank) {
     return stats;
   }
-  return {
+  return unlockAchievement({
     ...stats,
     xp: 0,
     prestige: stats.prestige + 1
+  }, "prestige_1").stats;
+}
+
+export function getAchievement(id: string): AchievementDefinition | undefined {
+  return achievements.find((achievement) => achievement.id === id);
+}
+
+export function unlockAchievement(stats: PlayerStats, achievementId: string): { stats: PlayerStats; unlocked?: AchievementDefinition } {
+  const achievement = getAchievement(achievementId);
+  if (!achievement || stats.achievements[achievementId]) {
+    return { stats };
+  }
+  return {
+    stats: {
+      ...stats,
+      achievements: {
+        ...stats.achievements,
+        [achievementId]: new Date().toISOString()
+      }
+    },
+    unlocked: achievement
   };
 }
 
@@ -178,6 +219,7 @@ export function loadStats(): PlayerStats {
     xp: loaded.xp ?? 0,
     lifetimeXp: loaded.lifetimeXp ?? loaded.xp ?? 0,
     prestige: loaded.prestige ?? 0,
+    achievements: loaded.achievements ?? {},
     opponents: loaded.opponents ?? {},
     history: loaded.history ?? []
   };

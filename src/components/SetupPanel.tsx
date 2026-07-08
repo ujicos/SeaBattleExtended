@@ -71,6 +71,30 @@ export function SetupPanel({ settings, orientation, onSettings, onRotate, onShuf
           </label>
         </div>
       )}
+      <div className="modifier-grid">
+        <label className="toggle modifier-toggle">
+          <input
+            type="checkbox"
+            checked={settings.modifiers.fogTide}
+            onChange={(event) => onSettings({ ...settings, modifiers: { ...settings.modifiers, fogTide: event.target.checked } })}
+          />
+          <span>
+            <strong>Fog Tide</strong>
+            <small>Temporary fog rolls over the target board.</small>
+          </span>
+        </label>
+        <label className="toggle modifier-toggle">
+          <input
+            type="checkbox"
+            checked={settings.modifiers.stormMode}
+            onChange={(event) => onSettings({ ...settings, modifiers: { ...settings.modifiers, stormMode: event.target.checked } })}
+          />
+          <span>
+            <strong>Storm Mode</strong>
+            <small>Storm waves can nudge unhit ships.</small>
+          </span>
+        </label>
+      </div>
       <div className="action-row">
         <button className="icon-button" type="button" onClick={onRotate} title="Rotate selected ship">
           <RotateCw size={18} /> Rotate

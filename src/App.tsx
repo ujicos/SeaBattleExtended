@@ -1,5 +1,6 @@
 import { Anchor, BarChart3, ChevronDown, Crown, Music2, Radio, Settings, Shield, Trophy, UserRound, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AchievementsPanel } from "./components/AchievementsPanel";
 import { BoardGrid, isSunkBufferCoord } from "./components/BoardGrid";
 import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
@@ -14,9 +15,11 @@ import { listOpenLobbies, PeerGameClient, type LobbySummary } from "./services/n
 import {
   loadProfile,
   loadStats,
+  getAchievement,
   makeIdentity,
   makeEmptyStats,
   awardXp,
+  unlockAchievement,
   prestigeStats,
   recordMatch,
   removeMatch,
@@ -24,6 +27,7 @@ import {
   saveStats,
   xpAwards,
   type PlayerProfile,
+  type AchievementDefinition,
   type PlayerStats
 } from "./services/storage";
 import { loadAppVersion, type AppVersion } from "./services/version";
@@ -89,9 +93,45 @@ function xpForShot(result: ShotResult): number {
   return 0;
 }
 
+function normalizeSettings(settings: GameSettings): GameSettings {
+  return {
+    ...settings,
+    modifiers: {
+      fogTide: settings.modifiers?.fogTide ?? false,
+      stormMode: settings.modifiers?.stormMode ?? false
+    }
+  };
+}
+
+function driftBoardWithStorm(board: BoardState): { board: BoardState; moved: boolean } {
+  const candidates = board.ships.flatMap((ship) => {
+    if (ship.hits.length > 0) {
+      return [];
+    }
+    return [
+      { row: ship.origin.row - 1, col: ship.origin.col },
+      { row: ship.origin.row + 1, col: ship.origin.col },
+      { row: ship.origin.row, col: ship.origin.col - 1 },
+      { row: ship.origin.row, col: ship.origin.col + 1 }
+    ]
+      .filter((origin) => {
+        const cells = getShipCells({ ...ship, origin });
+        return cells.every((cell) => !board.shots[coordKey(cell)]) && canPlaceShip(board, ship, origin, ship.orientation, ship.id);
+      })
+      .map((origin) => ({ ship, origin }));
+  });
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  if (!pick) {
+    return { board, moved: false };
+  }
+  return { board: placeShip(board, pick.ship, pick.origin, pick.ship.orientation), moved: true };
+}
+
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
+type StormPhase = "clear" | "warning" | "wave";
 type AudioMode = "on" | "music-muted" | "muted";
 const BOARD_SWITCH_DELAY_MS = 300;
 const BOARD_RETURN_DELAY_MS = 1200;
@@ -114,13 +154,17 @@ interface ShotResultPayload {
   winner: "local" | "remote" | null;
 }
 
+interface StormBoardPayload {
+  board: BoardState;
+}
+
 function App() {
   const [profile, setProfile] = useState<PlayerProfile>(() => loadProfile());
   const [stats, setStats] = useState<PlayerStats>(() => loadStats());
   const [game, setGame] = useState(() => createInitialGame(defaultSettings));
   const [orientation, setOrientation] = useState<Orientation>("horizontal");
   const [hovered, setHovered] = useState<Coordinate | null>(null);
-  const [activeTab, setActiveTab] = useState<"play" | "profile" | "stats" | "lobby">("play");
+  const [activeTab, setActiveTab] = useState<"play" | "profile" | "stats" | "lobby" | "achievements">("play");
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [networkStatus, setNetworkStatus] = useState("Offline practice");
@@ -138,6 +182,8 @@ function App() {
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
+  const [achievementToast, setAchievementToast] = useState<AchievementDefinition | null>(null);
+  const [stormPhase, setStormPhase] = useState<StormPhase>("clear");
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
@@ -149,6 +195,10 @@ function App() {
   const boardSwitchTimer = useRef<number | null>(null);
   const boardReturnTimer = useRef<number | null>(null);
   const copyNoticeTimer = useRef<number | null>(null);
+  const achievementToastTimer = useRef<number | null>(null);
+  const stormTimer = useRef<number | null>(null);
+  const stormClearTimer = useRef<number | null>(null);
+  const lastStormMove = useRef(-1);
   const matchRecordedRef = useRef(false);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
@@ -257,6 +307,27 @@ function App() {
     }, 1400);
   }
 
+  function showAchievementToast(achievement: AchievementDefinition) {
+    setAchievementToast(achievement);
+    if (achievementToastTimer.current !== null) {
+      window.clearTimeout(achievementToastTimer.current);
+    }
+    achievementToastTimer.current = window.setTimeout(() => {
+      achievementToastTimer.current = null;
+      setAchievementToast(null);
+    }, 2600);
+  }
+
+  function unlockLocalAchievement(achievementId: string) {
+    setStats((current) => {
+      const result = unlockAchievement(current, achievementId);
+      if (result.unlocked) {
+        showAchievementToast(result.unlocked);
+      }
+      return result.stats;
+    });
+  }
+
   function showBattleBoard(view: BattleBoardView, holdMs = 0, delayMs = 0) {
     if (boardSwitchTimer.current !== null) {
       window.clearTimeout(boardSwitchTimer.current);
@@ -309,6 +380,15 @@ function App() {
     return () => {
       if (copyNoticeTimer.current !== null) {
         window.clearTimeout(copyNoticeTimer.current);
+      }
+      if (achievementToastTimer.current !== null) {
+        window.clearTimeout(achievementToastTimer.current);
+      }
+      if (stormTimer.current !== null) {
+        window.clearTimeout(stormTimer.current);
+      }
+      if (stormClearTimer.current !== null) {
+        window.clearTimeout(stormClearTimer.current);
       }
     };
   }, []);
@@ -373,6 +453,46 @@ function App() {
   }, [game.turn, game.phase, game.settings.blitz.seconds]);
 
   useEffect(() => {
+    if (game.phase !== "battle" || !game.settings.modifiers.stormMode || game.moves === 0 || game.moves % 6 !== 0 || lastStormMove.current === game.moves) {
+      return;
+    }
+    lastStormMove.current = game.moves;
+    setStormPhase("warning");
+    audio.play("storm-warn", 0.8);
+    if (stormTimer.current !== null) {
+      window.clearTimeout(stormTimer.current);
+    }
+    stormTimer.current = window.setTimeout(() => {
+      stormTimer.current = null;
+      setStormPhase("wave");
+      audio.play("storm-wave", 0.9);
+      setGame((current) => {
+        if (current.phase !== "battle") {
+          return current;
+        }
+        const localStorm = driftBoardWithStorm(current.localBoard);
+        const remoteStorm = matchMode === "practice" ? driftBoardWithStorm(current.remoteBoard) : { board: current.remoteBoard, moved: false };
+        if (localStorm.moved) {
+          unlockLocalAchievement("storm_chaser");
+          network.current?.send("storm-board", { board: localStorm.board } satisfies StormBoardPayload);
+        }
+        return {
+          ...current,
+          localBoard: localStorm.board,
+          remoteBoard: remoteStorm.board
+        };
+      });
+      if (stormClearTimer.current !== null) {
+        window.clearTimeout(stormClearTimer.current);
+      }
+      stormClearTimer.current = window.setTimeout(() => {
+        stormClearTimer.current = null;
+        setStormPhase("clear");
+      }, 1400);
+    }, 3000);
+  }, [game.moves, game.phase, game.settings.modifiers.stormMode, matchMode]);
+
+  useEffect(() => {
     if (game.phase !== "battle") {
       setSelectedTarget(null);
       setBattleBoardView("target");
@@ -403,17 +523,18 @@ function App() {
   }, [clock, game.phase, game.settings.blitz.enabled, game.settings.blitz.timeoutAction, game.turn]);
 
   function updateSettings(settings: GameSettings) {
-    const nextConfig = getBoardConfig(settings.boardId);
+    const nextSettings = normalizeSettings(settings);
+    const nextConfig = getBoardConfig(nextSettings.boardId);
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
     setGame((current) => ({
-      ...resetBoards(current, settings),
+      ...resetBoards(current, nextSettings),
       localBoard: randomizeFleet(nextConfig),
       selectedShipId: null
     }));
     if (matchMode === "p2p" && peerRole === "host") {
-      network.current?.send("settings", settings);
+      network.current?.send("settings", nextSettings);
     }
   }
 
@@ -539,6 +660,15 @@ function App() {
         xpForShot(outcome.result)
       )
     );
+    if (outcome.result === "hit" || outcome.result === "sunk") {
+      unlockLocalAchievement("first_hit");
+      if (game.settings.modifiers.fogTide) {
+        unlockLocalAchievement("fog_hit");
+      }
+    }
+    if (outcome.result === "sunk") {
+      unlockLocalAchievement("first_sink");
+    }
     network.current?.send("shot", { coord } satisfies ShotPayload);
     if (outcome.winner) {
       endMatch("win", state);
@@ -578,6 +708,9 @@ function App() {
     }
     matchRecordedRef.current = true;
     audio.play(result === "win" ? "victory" : "defeat");
+    if (result === "win") {
+      unlockLocalAchievement("first_win");
+    }
     const durationMs = Math.round((state.endedAt ?? performance.now()) - (state.startedAt ?? performance.now()));
     setStats((current) =>
       recordMatch(current, {
@@ -698,7 +831,7 @@ function App() {
       }
 
       if (message.type === "settings") {
-        const settings = message.payload as GameSettings;
+        const settings = normalizeSettings(message.payload as GameSettings);
         const nextConfig = getBoardConfig(settings.boardId);
         setGame((current) => ({
           ...resetBoards(current, settings),
@@ -710,6 +843,12 @@ function App() {
         setRemoteBoardReady(null);
         setActiveTab("play");
         setNetworkStatus("Host settings received. Click ships to rotate, then Ready.");
+        return;
+      }
+
+      if (message.type === "storm-board") {
+        const payload = message.payload as StormBoardPayload;
+        setGame((current) => ({ ...current, remoteBoard: payload.board }));
         return;
       }
 
@@ -897,7 +1036,8 @@ function App() {
           ["play", Shield, "Play"],
           ["lobby", Radio, "Lobby"],
           ["profile", Settings, "Profile"],
-          ["stats", Trophy, "Stats"]
+          ["stats", Trophy, "Stats"],
+          ["achievements", Crown, "Awards"]
         ].map(([key, Icon, label]) => (
           <button
             className={activeTab === key ? "active" : ""}
@@ -1005,13 +1145,17 @@ function App() {
           {(game.phase === "battle" || game.phase === "victory" || game.phase === "defeat") && (
             <>
               <section className="battle-status">
-                <div>
-                  <small>Opponent</small>
-                  <strong>{opponent.displayName}</strong>
+                <div className="battle-player battle-player-local">
+                  <small>{peerRole === "guest" ? "Guest" : "Host"}</small>
+                  <strong>{profile.displayName}</strong>
                 </div>
-                <div>
+                <div className="battle-turn">
                   <small>Turn</small>
                   <strong>{game.turn === "local" ? "You" : opponent.displayName}</strong>
+                </div>
+                <div className="battle-player battle-player-remote">
+                  <small>{peerRole === "guest" ? "Host" : "Enemy"}</small>
+                  <strong>{opponent.displayName}</strong>
                 </div>
                 {game.settings.blitz.enabled && <div className="timer">{Math.ceil(clock)}</div>}
                 <button className="icon-button stats-match-button" type="button" onClick={() => setShowOpponentStats((value) => !value)} title="Opponent stats">
@@ -1093,6 +1237,8 @@ function App() {
                       selectedCoord={selectedTarget}
                       onCellPress={selectTarget}
                       attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
+                      fogActive={game.phase === "battle" && game.settings.modifiers.fogTide}
+                      stormPhase={stormPhase}
                       label="Target board"
                     />
                   </div>
@@ -1101,6 +1247,7 @@ function App() {
                       board={game.localBoard}
                       revealShips
                       attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
+                      stormPhase={stormPhase}
                       label="Your board"
                     />
                   </div>
@@ -1203,10 +1350,31 @@ function App() {
           stats={stats}
           onRemoveMatch={(matchId) => setStats((current) => removeMatch(current, matchId))}
           onResetStats={() => setStats(makeEmptyStats())}
-          onPrestige={() => setStats((current) => prestigeStats(current))}
+          onPrestige={() =>
+            setStats((current) => {
+              const next = prestigeStats(current);
+              if (next.prestige > current.prestige && !current.achievements.prestige_1) {
+                const achievement = getAchievement("prestige_1");
+                if (achievement) {
+                  showAchievementToast(achievement);
+                }
+              }
+              return next;
+            })
+          }
         />
       )}
+      {activeTab === "achievements" && <AchievementsPanel stats={stats} />}
       {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}
+      {achievementToast && (
+        <div className="achievement-toast" role="status">
+          <Trophy size={20} />
+          <div>
+            <small>Achievement unlocked</small>
+            <strong>{achievementToast.title}</strong>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

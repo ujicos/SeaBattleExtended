@@ -35,10 +35,16 @@ export interface BlitzConfig {
   timeoutAction: "lose-turn" | "lose-match";
 }
 
+export interface ModifierSettings {
+  fogTide: boolean;
+  stormMode: boolean;
+}
+
 export interface GameSettings {
   boardId: string;
   mode: "classic" | "extended";
   blitz: BlitzConfig;
+  modifiers: ModifierSettings;
 }
 
 export interface BoardState {
@@ -89,6 +95,7 @@ export interface NetworkMessage {
     | "shot-result"
     | "start"
     | "forfeit"
+    | "storm-board"
     | "timer"
     | "resync"
     | "game-over";

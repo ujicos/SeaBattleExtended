@@ -128,6 +128,10 @@ export const defaultSettings: GameSettings = {
     enabled: false,
     seconds: 10,
     timeoutAction: "lose-turn"
+  },
+  modifiers: {
+    fogTide: false,
+    stormMode: false
   }
 };
 

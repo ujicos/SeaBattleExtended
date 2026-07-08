@@ -177,7 +177,7 @@ small,
   top: 8px;
   z-index: 8;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   margin: 14px 0;
   padding: 6px;
@@ -325,7 +325,8 @@ select {
 
 .setup-grid,
 .stats-grid,
-.ready-grid {
+.ready-grid,
+.achievement-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -389,6 +390,30 @@ select {
   min-height: 22px;
 }
 
+.modifier-grid {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.modifier-toggle {
+  align-items: flex-start;
+  min-height: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.modifier-toggle span {
+  display: grid;
+  gap: 2px;
+}
+
+.modifier-toggle small {
+  color: #a9bfbc;
+}
+
 .ship-list {
   display: grid;
   gap: 8px;
@@ -421,6 +446,41 @@ select {
   background: rgba(4, 14, 21, 0.88);
   contain: layout paint;
   touch-action: none;
+}
+
+.fog-tide,
+.storm-front {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.fog-tide {
+  opacity: 0.58;
+  background:
+    linear-gradient(105deg, transparent 0 14%, rgba(215, 247, 241, 0.24) 22%, transparent 34% 58%, rgba(215, 247, 241, 0.18) 68%, transparent 82%),
+    radial-gradient(circle at 24% 36%, rgba(225, 255, 250, 0.18), transparent 28%),
+    radial-gradient(circle at 76% 64%, rgba(225, 255, 250, 0.14), transparent 30%);
+  filter: blur(3px);
+  animation: fog-drift 7s ease-in-out infinite alternate;
+}
+
+.storm-front {
+  opacity: 0;
+  background:
+    linear-gradient(110deg, transparent 0 24%, rgba(151, 217, 239, 0.22) 36%, rgba(72, 208, 187, 0.18) 46%, transparent 62%),
+    repeating-linear-gradient(110deg, transparent 0 18px, rgba(255, 255, 255, 0.1) 19px 21px, transparent 22px 44px);
+}
+
+.storm-warning .storm-front {
+  opacity: 0.38;
+  animation: storm-warn-pulse 900ms ease-in-out infinite alternate;
+}
+
+.storm-wave .storm-front {
+  opacity: 0.72;
+  animation: storm-wave-sweep 1300ms ease-out forwards;
 }
 
 .compact-board .board-grid {
@@ -783,8 +843,31 @@ select {
 
 .battle-status {
   grid-column: 1 / -1;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(150px, 220px) minmax(140px, 1fr) auto auto auto;
+  align-items: center;
   gap: 12px;
+}
+
+.battle-player,
+.battle-turn {
+  display: grid;
+  min-width: 0;
+}
+
+.battle-player strong,
+.battle-turn strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.battle-player-remote {
+  text-align: right;
+}
+
+.battle-turn {
+  text-align: center;
 }
 
 .battle-command-panel {
@@ -1147,6 +1230,29 @@ select {
   margin-top: 12px;
 }
 
+.achievement-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: #aac2be;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.achievement-card.unlocked {
+  color: #effffb;
+  border-color: rgba(72, 208, 187, 0.42);
+  background: rgba(72, 208, 187, 0.1);
+}
+
+.achievement-card div {
+  display: grid;
+  gap: 3px;
+}
+
 .reset-stats-button {
   width: min(220px, 100%);
   margin-bottom: 12px;
@@ -1306,6 +1412,29 @@ select {
   pointer-events: none;
 }
 
+.achievement-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(360px, calc(100vw - 28px));
+  padding: 12px 14px;
+  border: 1px solid rgba(72, 208, 187, 0.5);
+  border-radius: 14px;
+  color: #effffb;
+  background: rgba(8, 28, 36, 0.94);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
+  transform: translateX(-50%);
+  animation: achievement-toast-pop 2600ms ease forwards;
+}
+
+.achievement-toast small {
+  color: var(--accent);
+}
+
 .compact-action {
   width: auto;
   min-width: 76px;
@@ -1429,7 +1558,17 @@ select {
     position: sticky;
     top: max(16px, calc(env(safe-area-inset-top) + 8px));
     z-index: 2;
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) minmax(0, 1fr);
+  }
+
+  .battle-status .timer,
+  .battle-status .stats-match-button,
+  .battle-status .audio-toggle {
+    grid-column: auto;
+  }
+
+  .battle-status .audio-toggle {
+    grid-column: 1 / -1;
   }
 
   .panel,
@@ -1517,6 +1656,54 @@ select {
   100% {
     opacity: 0;
     transform: translateY(6px) scale(0.98);
+  }
+}
+
+@keyframes achievement-toast-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.98);
+  }
+  12%,
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.99);
+  }
+}
+
+@keyframes fog-drift {
+  from {
+    transform: translate3d(-4%, 0, 0);
+  }
+  to {
+    transform: translate3d(4%, 1%, 0);
+  }
+}
+
+@keyframes storm-warn-pulse {
+  from {
+    opacity: 0.22;
+  }
+  to {
+    opacity: 0.46;
+  }
+}
+
+@keyframes storm-wave-sweep {
+  0% {
+    opacity: 0;
+    transform: translate3d(-38%, 0, 0);
+  }
+  18% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(42%, 0, 0);
   }
 }
 
