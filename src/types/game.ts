@@ -3,7 +3,7 @@ export type Orientation = "horizontal" | "vertical";
 export type CellState = "empty" | "ship" | "miss" | "hit" | "sunk";
 export type Phase = "menu" | "setup" | "placing" | "lobby" | "battle" | "victory" | "defeat";
 export type ShotResult = "miss" | "hit" | "sunk" | "shielded" | "duplicate" | "invalid";
-export type TreasureKind = "shield" | "fake";
+export type TreasureKind = "shield" | "fake" | "multi-bomb" | "heat-missile";
 
 export interface Coordinate {
   row: number;
@@ -98,7 +98,9 @@ export interface NetworkMessage {
     | "ready"
     | "unready"
     | "shot"
+    | "multi-shot"
     | "shot-result"
+    | "multi-shot-result"
     | "start"
     | "forfeit"
     | "storm-board"

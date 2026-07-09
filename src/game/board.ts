@@ -239,7 +239,7 @@ export function randomizeFleet(config: BoardConfig, maxAttempts = 900): BoardSta
   return makeBoard(config);
 }
 
-export function seedTreasures(board: BoardState, shields: number, fakes: number): BoardState {
+export function seedTreasures(board: BoardState, treasuresToPlace: Partial<Record<TreasureKind, number>>): BoardState {
   const occupied = new Set(board.ships.flatMap(getShipCells).map(coordKey));
   const candidates: Coordinate[] = [];
 
@@ -262,11 +262,11 @@ export function seedTreasures(board: BoardState, shields: number, fakes: number)
     treasures[coordKey(coord)] = kind;
   };
 
-  for (let index = 0; index < shields; index += 1) {
-    place("shield");
-  }
-  for (let index = 0; index < fakes; index += 1) {
-    place("fake");
+  for (const kind of ["shield", "fake", "multi-bomb", "heat-missile"] as const) {
+    const count = treasuresToPlace[kind] ?? 0;
+    for (let index = 0; index < count; index += 1) {
+      place(kind);
+    }
   }
 
   return { ...board, treasures, treasureHits: {} };

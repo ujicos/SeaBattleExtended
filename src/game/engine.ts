@@ -2,12 +2,26 @@ import { defaultSettings, getBoardConfig } from "./config";
 import { allShipsSunk, makeBoard, randomizeFleet, receiveShot, seedTreasures } from "./board";
 import type { BoardState, Coordinate, GameSettings, GameState, PlayerSide, ShotOutcome } from "../types/game";
 
+export const treasureSpawnChances = {
+  multiBomb: 1 / 30,
+  heatMissile: 1 / 100
+} as const;
+
 export function createBoardForSettings(settings: GameSettings): BoardState {
   const config = getBoardConfig(settings.boardId);
   const board = randomizeFleet(config);
   const shieldCount = settings.modifiers.treasureTiles ? Math.max(1, Math.floor(config.size / 12)) : 0;
   const fakeCount = settings.modifiers.pirateChaos ? Math.max(1, Math.floor(config.size / 12)) : 0;
-  return shieldCount || fakeCount ? seedTreasures(board, shieldCount, fakeCount) : board;
+  const multiBombCount = settings.modifiers.treasureTiles && Math.random() < treasureSpawnChances.multiBomb ? 1 : 0;
+  const heatMissileCount = settings.modifiers.treasureTiles && Math.random() < treasureSpawnChances.heatMissile ? 1 : 0;
+  return shieldCount || fakeCount || multiBombCount || heatMissileCount
+    ? seedTreasures(board, {
+        shield: shieldCount,
+        fake: fakeCount,
+        "multi-bomb": multiBombCount,
+        "heat-missile": heatMissileCount
+      })
+    : board;
 }
 
 export function createInitialGame(settings: GameSettings = defaultSettings): GameState {

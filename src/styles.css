@@ -585,20 +585,20 @@ select {
 }
 
 .fog-tide {
-  opacity: 0.58;
+  opacity: 0.18;
   background:
-    linear-gradient(105deg, transparent 0 14%, rgba(215, 247, 241, 0.24) 22%, transparent 34% 58%, rgba(215, 247, 241, 0.18) 68%, transparent 82%),
+    linear-gradient(var(--wind-angle, 105deg), transparent 0 14%, rgba(215, 247, 241, 0.18) 22%, transparent 34% 58%, rgba(215, 247, 241, 0.12) 68%, transparent 82%),
     radial-gradient(circle at 24% 36%, rgba(225, 255, 250, 0.18), transparent 28%),
     radial-gradient(circle at 76% 64%, rgba(225, 255, 250, 0.14), transparent 30%);
   filter: blur(3px);
-  animation: fog-drift 7s ease-in-out infinite alternate;
+  animation: fog-drift var(--wind-speed, 7s) ease-in-out infinite alternate;
 }
 
 .storm-front {
   opacity: 0;
   background:
-    linear-gradient(110deg, transparent 0 24%, rgba(151, 217, 239, 0.22) 36%, rgba(72, 208, 187, 0.18) 46%, transparent 62%),
-    repeating-linear-gradient(110deg, transparent 0 18px, rgba(255, 255, 255, 0.1) 19px 21px, transparent 22px 44px);
+    linear-gradient(var(--wind-angle, 110deg), transparent 0 24%, rgba(151, 217, 239, 0.22) 36%, rgba(72, 208, 187, 0.18) 46%, transparent 62%),
+    repeating-linear-gradient(var(--wind-angle, 110deg), transparent 0 18px, rgba(255, 255, 255, 0.1) 19px 21px, transparent 22px 44px);
 }
 
 .storm-warning .storm-front {
@@ -640,6 +640,10 @@ select {
   z-index: 2;
   width: min(62%, 18px);
   height: min(62%, 18px);
+}
+
+.board-grid .cell-miss > svg {
+  transform: rotate(calc(var(--wind-angle, 105deg) - 105deg));
 }
 
 .cell:disabled {
@@ -1990,6 +1994,8 @@ select {
     top: max(16px, calc(env(safe-area-inset-top) + 8px));
     z-index: 2;
     grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
   }
 
   .battle-status .timer,
@@ -2000,6 +2006,14 @@ select {
 
   .battle-status .audio-toggle {
     grid-column: 1 / -1;
+  }
+
+  .battle-board-tabs {
+    display: none;
+  }
+
+  .battle-command-panel {
+    gap: 8px;
   }
 
   .panel,

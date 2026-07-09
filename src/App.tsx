@@ -44,7 +44,7 @@ import {
   type PlayerStats
 } from "./services/storage";
 import { loadAppVersion, type AppVersion } from "./services/version";
-import type { BoardState, Coordinate, GameSettings, GameState, Orientation, PeerIdentity, PlayerSide, ShotResult } from "./types/game";
+import type { BoardState, Coordinate, GameSettings, GameState, Orientation, PeerIdentity, PlayerSide, ShotResult, TreasureKind } from "./types/game";
 
 const guestIdentity: PeerIdentity = {
   playerId: "local_ai",
@@ -223,6 +223,11 @@ interface ReadyPayload {
 
 interface ShotPayload {
   coord: Coordinate;
+  treasureCoord?: Coordinate;
+}
+
+interface MultiShotPayload {
+  coords: Coordinate[];
 }
 
 interface ShotResultPayload {
@@ -234,8 +239,15 @@ interface ShotResultPayload {
   winner: "local" | "remote" | null;
   attackerShield?: number;
   defenderShield?: number;
-  treasureKind?: "shield" | "fake";
+  treasureKind?: TreasureKind;
   chaosMessage?: string;
+}
+
+interface MultiShotResultPayload {
+  results: ShotResultPayload[];
+  board: BoardState;
+  nextTurn: "local" | "remote";
+  winner: "local" | "remote" | null;
 }
 
 interface StormBoardPayload {
@@ -253,6 +265,35 @@ interface SocialMessage {
   from: "local" | "remote";
   text: string;
   kind: "chat" | "reaction";
+}
+
+interface WindState {
+  label: string;
+  angle: number;
+  speed: number;
+}
+
+const reactions = [
+  { id: "laugh", label: "Laugh" },
+  { id: "confused", label: "Confused" },
+  { id: "thinking", label: "Thinking" },
+  { id: "angry", label: "Angry" }
+] as const;
+
+const windOptions: WindState[] = [
+  { label: "N", angle: 180, speed: 2 },
+  { label: "NE", angle: 225, speed: 3 },
+  { label: "E", angle: 270, speed: 4 },
+  { label: "SE", angle: 315, speed: 2 },
+  { label: "S", angle: 0, speed: 5 },
+  { label: "SW", angle: 45, speed: 3 },
+  { label: "W", angle: 90, speed: 4 },
+  { label: "NW", angle: 135, speed: 2 }
+];
+
+function randomWind(): WindState {
+  const base = windOptions[Math.floor(Math.random() * windOptions.length)];
+  return { ...base, speed: Math.max(1, Math.min(5, base.speed + Math.floor(Math.random() * 3) - 1)) };
 }
 
 function App() {
@@ -279,6 +320,7 @@ function App() {
   const [remoteReady, setRemoteReady] = useState(false);
   const [remoteBoardReady, setRemoteBoardReady] = useState<BoardState | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<Coordinate | null>(null);
+  const [selectedTargets, setSelectedTargets] = useState<Coordinate[]>([]);
   const [battleBoardView, setBattleBoardView] = useState<BattleBoardView>("target");
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
@@ -288,6 +330,8 @@ function App() {
   const [stormPhase, setStormPhase] = useState<StormPhase>("clear");
   const [localShield, setLocalShield] = useState(0);
   const [remoteShield, setRemoteShield] = useState(0);
+  const [localMultiBombShots, setLocalMultiBombShots] = useState(0);
+  const [wind, setWind] = useState<WindState>(() => randomWind());
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [setupPanelExpanded, setSetupPanelExpanded] = useState(true);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
@@ -482,13 +526,14 @@ function App() {
     setSocialMessages((current) => [...current, message].slice(-6));
   }
 
-  function sendReaction(text: string): void {
+  function sendReaction(reaction: (typeof reactions)[number]): void {
     if (matchMode !== "p2p" || !roomCode) {
       return;
     }
-    const message: SocialMessage = { id: crypto.randomUUID(), from: "local", text, kind: "reaction" };
+    audio.play(`react-${reaction.id}`, 0.7);
+    const message: SocialMessage = { id: crypto.randomUUID(), from: "local", text: reaction.label, kind: "reaction" };
     appendSocialMessage(message);
-    network.current?.send("reaction", { text });
+    network.current?.send("reaction", { text: reaction.label, reaction: reaction.id });
   }
 
   function sendChat(): void {
@@ -802,8 +847,30 @@ function App() {
   }, [game.moves, game.phase, game.settings.modifiers.stormMode, matchMode]);
 
   useEffect(() => {
+    if (game.phase === "battle" && game.settings.modifiers.stormMode) {
+      return;
+    }
+    if (stormTimer.current !== null) {
+      window.clearTimeout(stormTimer.current);
+      stormTimer.current = null;
+    }
+    if (stormClearTimer.current !== null) {
+      window.clearTimeout(stormClearTimer.current);
+      stormClearTimer.current = null;
+    }
+    setStormPhase("clear");
+  }, [game.phase, game.settings.modifiers.stormMode]);
+
+  useEffect(() => {
+    if (game.phase === "battle" && game.moves > 0 && game.moves % 6 === 0) {
+      setWind(randomWind());
+    }
+  }, [game.moves, game.phase]);
+
+  useEffect(() => {
     if (game.phase !== "battle") {
       setSelectedTarget(null);
+      setSelectedTargets([]);
       setBattleBoardView("target");
       return;
     }
@@ -842,6 +909,7 @@ function App() {
     setSocialMessages([]);
     setLocalShield(0);
     setRemoteShield(0);
+    setLocalMultiBombShots(0);
     setGame((current) => ({
       ...resetBoards(current, nextSettings),
       localBoard: createBoardForSettings(nextSettings),
@@ -894,6 +962,7 @@ function App() {
     setLocalReady(false);
     setLocalShield(0);
     setRemoteShield(0);
+    setLocalMultiBombShots(0);
     setGame((current) => ({ ...current, localBoard: board, selectedShipId: nextUnplacedShipId(current.settings, new Set(board.ships.map((ship) => ship.id))) }));
   }
 
@@ -903,6 +972,7 @@ function App() {
     suppressMatchStatsRef.current = false;
     setLocalShield(0);
     setRemoteShield(0);
+    setLocalMultiBombShots(0);
     setXpBreakdown(null);
     setMatchMode("practice");
     setOpponent(guestIdentity);
@@ -916,19 +986,41 @@ function App() {
     if (hasBlockingShot(game.remoteBoard, coord) || isSunkBufferCoord(game.remoteBoard, coord)) {
       return;
     }
+    if (localMultiBombShots > 0) {
+      setSelectedTargets((current) => {
+        const exists = current.some((target) => sameCoord(target, coord));
+        if (exists) {
+          const next = current.filter((target) => !sameCoord(target, coord));
+          setSelectedTarget(next[0] ?? null);
+          return next;
+        }
+        const next = [...current, coord].slice(0, localMultiBombShots);
+        setSelectedTarget(next[0] ?? null);
+        return next;
+      });
+      return;
+    }
     setSelectedTarget(coord);
-  }, [game.phase, game.remoteBoard, game.turn]);
+    setSelectedTargets([coord]);
+  }, [game.phase, game.remoteBoard, game.turn, localMultiBombShots]);
 
   const fireSelectedTarget = useCallback(() => {
-    if (!selectedTarget) {
+    const targets = localMultiBombShots > 0 ? selectedTargets : selectedTarget ? [selectedTarget] : [];
+    if (!targets.length || (localMultiBombShots > 0 && targets.length < localMultiBombShots)) {
       return;
     }
-    if (hasBlockingShot(game.remoteBoard, selectedTarget) || isSunkBufferCoord(game.remoteBoard, selectedTarget)) {
+    const legalTargets = targets.filter((target) => !hasBlockingShot(game.remoteBoard, target) && !isSunkBufferCoord(game.remoteBoard, target));
+    if (legalTargets.length !== targets.length) {
       setSelectedTarget(null);
+      setSelectedTargets([]);
       return;
     }
-    fire(selectedTarget);
-  }, [game.remoteBoard, selectedTarget]);
+    if (localMultiBombShots > 0) {
+      fireMultiBomb(legalTargets);
+      return;
+    }
+    fire(legalTargets[0]);
+  }, [game.remoteBoard, localMultiBombShots, selectedTarget, selectedTargets]);
 
   function sameCoord(left: Coordinate, right: Coordinate): boolean {
     return left.row === right.row && left.col === right.col;
@@ -969,6 +1061,54 @@ function App() {
     return { coord };
   }
 
+  function treasureLabel(kind: TreasureKind): string {
+    if (kind === "multi-bomb") {
+      return "Multi-bomb";
+    }
+    if (kind === "heat-missile") {
+      return "Heat-seeking missile";
+    }
+    return kind === "shield" ? "TREASURE" : "FAKE TREASURE";
+  }
+
+  function findHeatSeekingTarget(board: BoardState): Coordinate | null {
+    const candidates = board.ships
+      .filter((ship) => !isShipSunk(ship))
+      .map((ship) => {
+        const hitKeys = new Set(ship.hits.map(coordKey));
+        return {
+          ship,
+          cells: getShipCells(ship).filter((cell) => !hitKeys.has(coordKey(cell)))
+        };
+      })
+      .filter((candidate) => candidate.cells.length > 0);
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    const maxLength = Math.max(...candidates.map(({ ship }) => ship.length));
+    const hitChance = maxLength >= 5 ? 0.95 : maxLength === 4 ? 0.88 : maxLength === 3 ? 0.75 : maxLength === 2 ? 0.58 : 0.35;
+    if (Math.random() > hitChance) {
+      return null;
+    }
+
+    const weighted = candidates.map((candidate) => ({
+      ...candidate,
+      weight: candidate.ship.length * candidate.ship.length
+    }));
+    const totalWeight = weighted.reduce((sum, candidate) => sum + candidate.weight, 0);
+    let pick = Math.random() * totalWeight;
+    for (const candidate of weighted) {
+      pick -= candidate.weight;
+      if (pick <= 0) {
+        return candidate.cells[Math.floor(Math.random() * candidate.cells.length)];
+      }
+    }
+    const fallback = weighted[weighted.length - 1];
+    return fallback.cells[Math.floor(Math.random() * fallback.cells.length)];
+  }
+
   useEffect(() => {
     function handleFireShortcut(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -980,7 +1120,8 @@ function App() {
       if (isTyping || (event.key !== "Enter" && event.key !== " ")) {
         return;
       }
-      if (gameRef.current.phase !== "battle" || gameRef.current.turn !== "local" || battleBoardView !== "target" || !selectedTarget) {
+      const hasTarget = localMultiBombShots > 0 ? selectedTargets.length === localMultiBombShots : Boolean(selectedTarget);
+      if (gameRef.current.phase !== "battle" || gameRef.current.turn !== "local" || battleBoardView !== "target" || !hasTarget) {
         return;
       }
       event.preventDefault();
@@ -989,7 +1130,92 @@ function App() {
 
     window.addEventListener("keydown", handleFireShortcut);
     return () => window.removeEventListener("keydown", handleFireShortcut);
-  }, [battleBoardView, fireSelectedTarget, selectedTarget]);
+  }, [battleBoardView, fireSelectedTarget, localMultiBombShots, selectedTarget, selectedTargets.length]);
+
+  function fireMultiBomb(coords: Coordinate[]) {
+    if (game.turn !== "local" || coords.length !== localMultiBombShots) {
+      return;
+    }
+
+    let board = game.remoteBoard;
+    let shield = remoteShield;
+    const results: ShotResultPayload[] = [];
+    let anyHit = false;
+    let totalHits = 0;
+    let totalSinks = 0;
+
+    for (const coord of coords) {
+      const treasure = findTreasureAt(board, coord);
+      if (treasure) {
+        board = markTreasureShot(board, coord);
+        results.push({ coord, result: "miss", board, nextTurn: "remote", winner: null, treasureKind: treasure });
+        playAttackVisual("remote", coord, "miss");
+        continue;
+      }
+
+      const protectedShip = shield > 0 ? findShipAt(board, coord) : undefined;
+      if (protectedShip) {
+        shield = Math.max(0, shield - 1);
+        board = markShieldedShot(board, coord);
+        results.push({ coord, result: "shielded", board, nextTurn: "remote", winner: null, defenderShield: shield });
+        playAttackVisual("remote", coord, "shielded");
+        continue;
+      }
+
+      const shot = receiveShot(board, coord);
+      board = shot.board;
+      if (shot.result === "hit" || shot.result === "sunk") {
+        anyHit = true;
+        totalHits += 1;
+      }
+      if (shot.result === "sunk") {
+        totalSinks += 1;
+      }
+      results.push({ coord, result: shot.result, board, shipId: shot.shipId, nextTurn: "remote", winner: null });
+      playAttackVisual("remote", coord, shot.result);
+      playShotResultSound(shot.result);
+    }
+
+    const winner: PlayerSide | null = allShipsSunk(board) ? "local" : null;
+    const nextTurn: PlayerSide = winner || anyHit ? "local" : "remote";
+    const nextState: GameState = {
+      ...game,
+      remoteBoard: board,
+      turn: winner ? "local" : nextTurn,
+      winner,
+      phase: winner ? "victory" : game.phase,
+      moves: game.moves + 1,
+      endedAt: winner ? performance.now() : game.endedAt,
+      log: [`local MULTI-BOMB ${coords.length} shots`, ...game.log].slice(0, 30)
+    };
+
+    setRemoteShield(shield);
+    setLocalMultiBombShots(0);
+    setSelectedTarget(null);
+    setSelectedTargets([]);
+    showEventToast(anyHit ? "Multi-bomb hit!" : "Multi-bomb splashed.");
+    showBattleBoard(nextTurn === "local" && !winner ? "target" : "fleet", nextTurn === "remote" ? BOARD_RETURN_DELAY_MS : 0, nextTurn === "remote" ? BOARD_SWITCH_DELAY_MS : 0);
+    setGameAfterImpact(nextState, game.turn);
+    setStats((current) =>
+      awardXp(
+        {
+          ...current,
+          totalShots: current.totalShots + coords.length,
+          hits: current.hits + totalHits,
+          shipsDestroyed: current.shipsDestroyed + totalSinks
+        },
+        xpAwards.shot * coords.length + totalHits * xpAwards.hit + totalSinks * xpAwards.sunk
+      )
+    );
+    network.current?.send("multi-shot", { coords } satisfies MultiShotPayload);
+    if (winner) {
+      endMatch("win", nextState);
+      return;
+    }
+    if (matchMode === "practice" && nextTurn === "remote") {
+      window.setTimeout(() => remoteTurn(nextState), 450);
+    }
+  }
 
   function fire(coord: Coordinate) {
     if (game.turn !== "local") {
@@ -1002,32 +1228,62 @@ function App() {
     }
     const treasure = findTreasureAt(game.remoteBoard, finalCoord);
     if (treasure) {
-      const remoteBoard = markTreasureShot(game.remoteBoard, finalCoord);
+      let remoteBoard = markTreasureShot(game.remoteBoard, finalCoord);
+      let result: ShotResult = "miss";
+      let missileCoord: Coordinate | null = null;
       const nextLocalShield = treasure === "shield" ? localShield + 1 : localShield;
       if (treasure === "shield") {
         setLocalShield(nextLocalShield);
         unlockLocalAchievement("treasure_found");
         audio.play("turn", 0.65);
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Treasure found: one-hit shield armed.`);
+      } else if (treasure === "multi-bomb") {
+        setLocalMultiBombShots(3);
+        unlockLocalAchievement("treasure_found");
+        audio.play("turn", 0.7);
+        showEventToast("Multi-bomb armed. Pick 3 targets.");
+      } else if (treasure === "heat-missile") {
+        missileCoord = findHeatSeekingTarget(remoteBoard);
+        if (missileCoord) {
+          const missileShot = receiveShot(remoteBoard, missileCoord);
+          remoteBoard = missileShot.board;
+          result = missileShot.result;
+          playAttackVisual("remote", missileCoord, missileShot.result);
+          playShotResultSound(missileShot.result);
+          showEventToast(`Heat-seeking missile locked on ${missileShot.result === "miss" ? "but splashed." : "and hit!"}`);
+        } else {
+          showEventToast("Heat-seeking missile lost the signal.");
+        }
+        unlockLocalAchievement("treasure_found");
       } else {
         unlockLocalAchievement("fake_treasure");
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Fake treasure! You got faked out.`);
       }
+      const winner: PlayerSide | null = allShipsSunk(remoteBoard) ? "local" : null;
+      const nextTurn: PlayerSide = winner || result === "hit" || result === "sunk" ? "local" : "remote";
       const state: GameState = {
         ...game,
         remoteBoard,
-        turn: "remote",
+        turn: winner ? "local" : nextTurn,
+        winner,
+        phase: winner ? "victory" : game.phase,
         moves: game.moves + 1,
-        log: [`local ${treasure === "shield" ? "TREASURE" : "FAKE TREASURE"} at ${finalCoord.row + 1},${finalCoord.col + 1}`, ...game.log].slice(0, 30)
+        endedAt: winner ? performance.now() : game.endedAt,
+        log: [`local ${treasureLabel(treasure)} at ${finalCoord.row + 1},${finalCoord.col + 1}`, ...game.log].slice(0, 30)
       };
       setSelectedTarget(null);
-      showBattleBoard("fleet", BOARD_RETURN_DELAY_MS, BOARD_SWITCH_DELAY_MS);
+      setSelectedTargets([]);
+      showBattleBoard(nextTurn === "local" && !winner ? "target" : "fleet", nextTurn === "remote" ? BOARD_RETURN_DELAY_MS : 0, nextTurn === "remote" ? BOARD_SWITCH_DELAY_MS : 0);
       playAttackVisual("remote", finalCoord, "miss");
       playShotResultSound("miss");
       setGameAfterImpact(state, game.turn);
       setStats((current) => awardXp({ ...current, totalShots: current.totalShots + 1 }, xpAwards.shot));
-      network.current?.send("shot", { coord: finalCoord } satisfies ShotPayload);
-      if (matchMode === "practice") {
+      network.current?.send("shot", { coord: missileCoord ?? finalCoord, treasureCoord: missileCoord ? finalCoord : undefined } satisfies ShotPayload);
+      if (winner) {
+        endMatch("win", state);
+        return;
+      }
+      if (matchMode === "practice" && nextTurn === "remote") {
         window.setTimeout(() => remoteTurn(state), 450);
       }
       return;
@@ -1047,6 +1303,7 @@ function App() {
         log: [`local SHIELDED at ${finalCoord.row + 1},${finalCoord.col + 1}`, ...game.log].slice(0, 30)
       };
       setSelectedTarget(null);
+      setSelectedTargets([]);
       showBattleBoard("fleet", BOARD_RETURN_DELAY_MS, BOARD_SWITCH_DELAY_MS);
       playAttackVisual("remote", finalCoord, "shielded");
       playShotResultSound("shielded");
@@ -1068,6 +1325,7 @@ function App() {
       showEventToast(chaos.message);
     }
     setSelectedTarget(null);
+    setSelectedTargets([]);
     showBattleBoard(
       outcome.nextTurn === "local" ? "target" : "fleet",
       outcome.nextTurn === "remote" ? BOARD_RETURN_DELAY_MS : 0,
@@ -1372,6 +1630,7 @@ function App() {
         setRemoteBoardReady(null);
         setLocalShield(0);
         setRemoteShield(0);
+        setLocalMultiBombShots(0);
         setSocialMessages([]);
         setActiveTab("play");
         setSetupPanelExpanded(false);
@@ -1407,6 +1666,7 @@ function App() {
         suppressMatchStatsRef.current = false;
         setXpBreakdown(null);
         setSocialMessages([]);
+        setLocalMultiBombShots(0);
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
         setNetworkStatus("Battle live. Host fires first.");
         setActiveTab("play");
@@ -1439,19 +1699,22 @@ function App() {
             phase: "defeat",
             winner: "remote",
             endedAt: performance.now(),
-            log: ["admin NUKE received", ...current.log].slice(0, 30)
+            log: ["ADMIN called a Tactical Nuke!", ...current.log].slice(0, 30)
           };
           setGame(nextState);
-          showEventToast("Admin nuke received. Stats declined.");
+          showEventToast("ADMIN called a Tactical Nuke! Stats declined.");
           endMatch("loss", nextState);
         }
         return;
       }
 
       if (message.type === "chat" || message.type === "reaction") {
-        const payload = message.payload as { text?: string };
+        const payload = message.payload as { text?: string; reaction?: string };
         const text = String(payload.text ?? "").trim().slice(0, 120);
         if (text) {
+          if (message.type === "reaction" && payload.reaction) {
+            audio.play(`react-${payload.reaction}`, OPPONENT_SOUND_VOLUME);
+          }
           appendSocialMessage({
             id: message.messageId,
             from: "remote",
@@ -1477,12 +1740,23 @@ function App() {
       if (message.type === "shot") {
         const payload = message.payload as ShotPayload | Coordinate;
         const coord = "coord" in payload ? payload.coord : payload;
-        receiveRemoteShot(coord);
+        const treasureCoord = "coord" in payload ? payload.treasureCoord : undefined;
+        receiveRemoteShot(coord, treasureCoord);
+        return;
+      }
+
+      if (message.type === "multi-shot") {
+        const payload = message.payload as MultiShotPayload;
+        receiveRemoteMultiShot(payload.coords.slice(0, 3));
         return;
       }
 
       if (message.type === "shot-result") {
         applyRemoteShotResult(message.payload as ShotResultPayload);
+      }
+
+      if (message.type === "multi-shot-result") {
+        applyRemoteMultiShotResult(message.payload as MultiShotResultPayload);
       }
     });
   }
@@ -1514,6 +1788,7 @@ function App() {
     suppressMatchStatsRef.current = false;
     setXpBreakdown(null);
     setSocialMessages([]);
+    setLocalMultiBombShots(0);
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
     setNetworkStatus("Battle live. Your turn.");
@@ -1534,24 +1809,33 @@ function App() {
       phase: "victory",
       winner: "local",
       endedAt: performance.now(),
-      log: ["admin NUKE launched", ...game.log].slice(0, 30)
+      log: ["ADMIN called a Tactical Nuke!", ...game.log].slice(0, 30)
     };
     network.current?.send("admin-nuke", { noStats: true });
     unlockLocalAchievement("admin_nuke");
     setGame(nextState);
-    showEventToast("Admin nuke launched. Stats declined.");
+    showEventToast("ADMIN called a Tactical Nuke! Stats declined.");
     endMatch("win", nextState);
   }
 
-  function receiveRemoteShot(coord: Coordinate) {
+  function receiveRemoteShot(coord: Coordinate, treasureCoord?: Coordinate) {
     const current = gameRef.current;
-    const treasure = findTreasureAt(current.localBoard, coord);
+    const initialBoard = treasureCoord ? markTreasureShot(current.localBoard, treasureCoord) : current.localBoard;
+    if (treasureCoord) {
+      showEventToast(`${opponent.displayName} launched a heat-seeking missile.`);
+    }
+    const treasure = treasureCoord ? undefined : findTreasureAt(initialBoard, coord);
     if (treasure) {
-      const board = markTreasureShot(current.localBoard, coord);
+      const board = markTreasureShot(initialBoard, coord);
       const nextRemoteShield = treasure === "shield" ? remoteShieldRef.current + 1 : remoteShieldRef.current;
       if (treasure === "shield") {
         setRemoteShield(nextRemoteShield);
         audio.play("turn", 0.35);
+      }
+      if (treasure === "multi-bomb") {
+        showEventToast(`${opponent.displayName} armed a multi-bomb.`);
+      } else if (treasure === "heat-missile") {
+        showEventToast(`${opponent.displayName} found a heat-seeking missile.`);
       }
       playAttackVisual("local", coord, "miss", OPPONENT_SOUND_VOLUME);
       playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
@@ -1577,13 +1861,13 @@ function App() {
       return;
     }
 
-    const shieldedShip = localShieldRef.current > 0 ? findShipAt(current.localBoard, coord) : undefined;
+    const shieldedShip = localShieldRef.current > 0 ? findShipAt(initialBoard, coord) : undefined;
     if (shieldedShip) {
       const nextLocalShield = Math.max(0, localShieldRef.current - 1);
       setLocalShield(nextLocalShield);
       showEventToast("Your shield blocked a hit.");
       unlockLocalAchievement("shield_save");
-      const board = markShieldedShot(current.localBoard, coord);
+      const board = markShieldedShot(initialBoard, coord);
       playAttackVisual("local", coord, "shielded", OPPONENT_SOUND_VOLUME);
       playShotResultSound("shielded", OPPONENT_SOUND_VOLUME);
       const nextState: GameState = {
@@ -1607,12 +1891,12 @@ function App() {
       return;
     }
 
-    const shot = receiveShot(current.localBoard, coord);
+    const shot = receiveShot(initialBoard, coord);
     if (shot.result === "duplicate") {
       network.current?.send("shot-result", {
         coord,
         result: "duplicate",
-        board: current.localBoard,
+        board: initialBoard,
         nextTurn: "remote",
         winner: null,
         defenderShield: localShieldRef.current
@@ -1656,6 +1940,63 @@ function App() {
     }
   }
 
+  function receiveRemoteMultiShot(coords: Coordinate[]) {
+    const current = gameRef.current;
+    let board = current.localBoard;
+    let shield = localShieldRef.current;
+    const results: ShotResultPayload[] = [];
+    let anyHit = false;
+
+    for (const coord of coords) {
+      const treasure = findTreasureAt(board, coord);
+      if (treasure) {
+        board = markTreasureShot(board, coord);
+        results.push({ coord, result: "miss", board, nextTurn: "local", winner: null, treasureKind: treasure });
+        playAttackVisual("local", coord, "miss", OPPONENT_SOUND_VOLUME);
+        continue;
+      }
+
+      const protectedShip = shield > 0 ? findShipAt(board, coord) : undefined;
+      if (protectedShip) {
+        shield = Math.max(0, shield - 1);
+        board = markShieldedShot(board, coord);
+        results.push({ coord, result: "shielded", board, nextTurn: "local", winner: null, defenderShield: shield });
+        playAttackVisual("local", coord, "shielded", OPPONENT_SOUND_VOLUME);
+        continue;
+      }
+
+      const shot = receiveShot(board, coord);
+      board = shot.board;
+      anyHit = anyHit || shot.result === "hit" || shot.result === "sunk";
+      results.push({ coord, result: shot.result, board, shipId: shot.shipId, nextTurn: "local", winner: null });
+      playAttackVisual("local", coord, shot.result, OPPONENT_SOUND_VOLUME);
+      playShotResultSound(shot.result, OPPONENT_SOUND_VOLUME);
+    }
+
+    const winner: PlayerSide | null = allShipsSunk(board) ? "remote" : null;
+    const nextTurn: PlayerSide = winner || anyHit ? "remote" : "local";
+    const nextState: GameState = {
+      ...current,
+      localBoard: board,
+      turn: winner ? "remote" : nextTurn,
+      winner,
+      phase: winner ? "defeat" : current.phase,
+      moves: current.moves + 1,
+      endedAt: winner ? performance.now() : current.endedAt,
+      log: [`remote MULTI-BOMB ${coords.length} shots`, ...current.log].slice(0, 30)
+    };
+
+    setLocalShield(shield);
+    showBattleBoard(nextTurn === "local" && !winner ? "target" : "fleet", 0, nextTurn === "local" && !winner ? BOARD_SWITCH_DELAY_MS : 0);
+    setGameAfterImpact(nextState, current.turn);
+    network.current?.send("multi-shot-result", { results, board, nextTurn, winner } satisfies MultiShotResultPayload);
+    if (winner) {
+      endMatch("loss", nextState);
+    } else if (nextTurn === "local") {
+      notifyLocalTurn();
+    }
+  }
+
   function rematch() {
     setLocalReady(false);
     setRemoteReady(false);
@@ -1681,6 +2022,12 @@ function App() {
     if (payload.treasureKind === "shield") {
       audio.play("turn", 0.45);
       showEventToast("Treasure found: one-hit shield armed.");
+    } else if (payload.treasureKind === "multi-bomb") {
+      setLocalMultiBombShots(3);
+      audio.play("turn", 0.7);
+      showEventToast("Multi-bomb armed. Pick 3 targets.");
+    } else if (payload.treasureKind === "heat-missile") {
+      showEventToast("Heat-seeking missile launched.");
     } else if (payload.treasureKind === "fake") {
       showEventToast("Fake treasure! You got faked out.");
     } else if (payload.result === "shielded") {
@@ -1715,6 +2062,32 @@ function App() {
         }, BOARD_SWITCH_DELAY_MS);
         return { ...nextState, turn: current.turn };
       }
+      return nextState;
+    });
+  }
+
+  function applyRemoteMultiShotResult(payload: MultiShotResultPayload) {
+    if (payload.results.some((result) => result.result === "hit" || result.result === "sunk")) {
+      showEventToast("Multi-bomb confirmed hits.");
+    }
+    setGame((current) => {
+      const nextWinner: PlayerSide | null = payload.winner === "local" ? "remote" : payload.winner === "remote" ? "local" : null;
+      const nextTurn: PlayerSide = payload.nextTurn === "local" ? "remote" : "local";
+      const phase = nextWinner === "local" ? "victory" : nextWinner === "remote" ? "defeat" : current.phase;
+      const nextState: GameState = {
+        ...current,
+        remoteBoard: payload.board,
+        turn: nextWinner ? current.turn : nextTurn,
+        winner: nextWinner,
+        phase,
+        endedAt: nextWinner ? performance.now() : current.endedAt
+      };
+      if (nextWinner === "local") {
+        endMatch("win", nextState);
+      } else if (nextTurn === "local") {
+        notifyLocalTurn();
+      }
+      showBattleBoard(nextTurn === "local" && !nextWinner ? "target" : "fleet", nextTurn === "remote" && !nextWinner ? BOARD_RETURN_DELAY_MS : 0);
       return nextState;
     });
   }
@@ -1987,10 +2360,12 @@ function App() {
                       revealShips={game.phase !== "battle"}
                       interactive={game.phase === "battle" && game.turn === "local" && battleBoardView === "target"}
                       selectedCoord={selectedTarget}
+                      selectedCoords={selectedTargets}
                       onCellPress={selectTarget}
                       attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
                       fogActive={game.phase === "battle" && game.settings.modifiers.fogTide}
                       stormPhase={stormPhase}
+                      wind={wind}
                       label="Target board"
                     />
                   </div>
@@ -2000,21 +2375,32 @@ function App() {
                       revealShips
                       attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
                       stormPhase={stormPhase}
+                      wind={wind}
                       label="Your board"
                     />
                   </div>
                 </div>
                 <section className="fire-controls fire-controls-bottom">
-                  <button className="primary fire-button" type="button" disabled={game.phase !== "battle" || game.turn !== "local" || battleBoardView !== "target" || !selectedTarget} onClick={fireSelectedTarget}>
-                    Fire!
+                  <button
+                    className="primary fire-button"
+                    type="button"
+                    disabled={
+                      game.phase !== "battle" ||
+                      game.turn !== "local" ||
+                      battleBoardView !== "target" ||
+                      (localMultiBombShots > 0 ? selectedTargets.length !== localMultiBombShots : !selectedTarget)
+                    }
+                    onClick={fireSelectedTarget}
+                  >
+                    {localMultiBombShots > 0 ? `Fire ${selectedTargets.length}/${localMultiBombShots}` : "Fire!"}
                   </button>
                 </section>
                 {matchMode === "p2p" && roomCode && (
                   <section className="battle-social-panel">
                     <div className="reaction-row" aria-label="Quick reactions">
-                      {["Nice", "Oof", "Boom", "Close"].map((reaction) => (
-                        <button className="secondary compact-action" type="button" key={reaction} onClick={() => sendReaction(reaction)}>
-                          {reaction}
+                      {reactions.map((reaction) => (
+                        <button className="secondary compact-action" type="button" key={reaction.id} onClick={() => sendReaction(reaction)}>
+                          {reaction.label}
                         </button>
                       ))}
                     </div>

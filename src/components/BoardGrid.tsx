@@ -16,6 +16,7 @@ interface BoardGridProps {
   revealShips: boolean;
   interactive?: boolean;
   selectedCoord?: Coordinate | null;
+  selectedCoords?: Coordinate[];
   selectedShip?: ShipDefinition;
   orientation?: Orientation;
   onCellPress?: (coord: Coordinate) => void;
@@ -25,6 +26,7 @@ interface BoardGridProps {
   fogActive?: boolean;
   chaosActive?: boolean;
   stormPhase?: "clear" | "warning" | "wave";
+  wind?: { label: string; angle: number; speed: number };
   compact?: boolean;
   label: string;
   collapsible?: boolean;
@@ -97,6 +99,7 @@ export const BoardGrid = memo(function BoardGrid({
   revealShips,
   interactive = false,
   selectedCoord,
+  selectedCoords = [],
   onCellPress,
   onCellHover,
   preview,
@@ -104,6 +107,7 @@ export const BoardGrid = memo(function BoardGrid({
   fogActive = false,
   chaosActive = false,
   stormPhase = "clear",
+  wind,
   compact = false,
   label,
   collapsible = false,
@@ -115,6 +119,13 @@ export const BoardGrid = memo(function BoardGrid({
     () => new Map(preview?.cells.map((cell) => [coordKey(cell), preview.valid ? "valid" : "invalid"])),
     [preview]
   );
+  const selectedKeys = useMemo(() => {
+    const keys = new Set(selectedCoords.map(coordKey));
+    if (selectedCoord) {
+      keys.add(coordKey(selectedCoord));
+    }
+    return keys;
+  }, [selectedCoord, selectedCoords]);
   const { shipByCell, sunkBufferMap, sunkShipMap } = useMemo(() => {
     const nextShipByCell = new Map<string, PlacedShip>();
     const nextSunkBufferMap = new Map<string, true>();
@@ -193,19 +204,25 @@ export const BoardGrid = memo(function BoardGrid({
           aria-expanded={expanded}
         >
           <span>{label}</span>
-          <small>{board.size}x{board.size}</small>
+          <small>{wind ? `${board.size}x${board.size} · ${wind.label} ${wind.speed}` : `${board.size}x${board.size}`}</small>
           <ChevronDown className={`collapse-chevron${expanded ? " expanded" : ""}`} size={16} />
         </button>
       ) : (
         <div className="board-heading">
           <span>{label}</span>
-          <small>{board.size}x{board.size}</small>
+          <small>{wind ? `${board.size}x${board.size} · ${wind.label} ${wind.speed}` : `${board.size}x${board.size}`}</small>
         </div>
       )}
       {showGrid && (
         <div
           className={`board-grid${fogActive ? " fog-active" : ""}${chaosActive ? " rum-fog-active" : ""}${stormPhase !== "clear" ? ` storm-${stormPhase}` : ""}`}
-          style={{ "--board-size": board.size } as React.CSSProperties}
+          style={
+            {
+              "--board-size": board.size,
+              "--wind-angle": `${wind?.angle ?? 105}deg`,
+              "--wind-speed": `${Math.max(4, 10 - (wind?.speed ?? 3))}s`
+            } as React.CSSProperties
+          }
           onPointerMove={handleTouchMove}
           onPointerUp={handleTouchEnd}
           onPointerCancel={handleTouchEnd}
@@ -244,7 +261,7 @@ export const BoardGrid = memo(function BoardGrid({
             const sunkBuffer = sunkBufferMap.has(key);
             const sunkShip = sunkShipMap.has(key);
             const blocked = interactive && sunkBuffer && !sunkShip;
-            const selected = selectedCoord && coordKey(selectedCoord) === key;
+            const selected = selectedKeys.has(key);
             const showShipSprite = Boolean(ship && ((!shot && revealShips) || sunkShip));
 
             return (
