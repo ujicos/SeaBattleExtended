@@ -2107,7 +2107,10 @@ function App() {
           <div>
             <strong>
               <span className="brand-title">Sea Battle Extended</span>
-              <span className="version-badge">{appVersion?.commit ? `v${appVersion.commit.slice(0, 7)}` : "local"}</span>
+              <span className="version-badge">
+                <span>{appVersion?.commit ? `v${appVersion.commit.slice(0, 7)}` : "local"}</span>
+                <small>beta</small>
+              </span>
             </strong>
             <small>WebRTC fleet battles</small>
           </div>

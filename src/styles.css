@@ -136,14 +136,25 @@ button {
 
 .version-badge {
   flex: 0 0 auto;
-  padding: 2px 6px;
+  display: inline-grid;
+  place-items: center;
+  gap: 0;
+  padding: 3px 7px;
   border: 1px solid rgba(72, 208, 187, 0.28);
   border-radius: 999px;
   color: #9fe9df;
   background: rgba(72, 208, 187, 0.1);
   font-size: 0.68rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1;
+}
+
+.version-badge small {
+  color: #86cfc6;
+  font-size: 0.5rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .section-title span {
@@ -397,6 +408,10 @@ select {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin: 12px 0;
+}
+
+.single-action-row {
+  grid-template-columns: 1fr;
 }
 
 .board-action-row {
@@ -1986,8 +2001,12 @@ select {
   }
 
   .version-badge {
-    padding: 2px 5px;
+    padding: 3px 6px;
     font-size: 0.62rem;
+  }
+
+  .version-badge small {
+    font-size: 0.46rem;
   }
 
   .top-actions {

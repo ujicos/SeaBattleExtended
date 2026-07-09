@@ -147,76 +147,80 @@ export function ProfilePanel({
             <small>Stores it in this browser until you clear it.</small>
           </span>
         </label>
-        <div className="action-row">
+        <div className={adminVerified ? "action-row" : "action-row single-action-row"}>
           <button className="icon-button" type="button" disabled={adminBusy} onClick={() => void refreshAdminStatus()}>
             <ShieldAlert size={18} />
             Verify
           </button>
-          <button
-            className="icon-button danger-action"
-            type="button"
-            disabled={adminBusy}
-            onClick={() => {
-              if (window.confirm("Are you sure you want to clear all open lobbies?")) {
-                void runAdminAction(() => adminClearLobbies(adminToken.trim()).then(() => undefined), "Open lobbies cleared.");
-              }
-            }}
-          >
-            <Trash2 size={18} />
-            Clear lobbies
-          </button>
-        </div>
-        {adminVerified && (
-          <button
-            className="secondary compact-action"
-            type="button"
-            disabled={adminBusy}
-            onClick={() => {
-              clearAdminToken();
-              setRememberAdminToken(false);
-              onAdminTokenChange("", false);
-              onAdminVerified(false);
-              setAdminStatus(null);
-              setAdminMessage("Admin token cleared.");
-            }}
-          >
-            Forget admin token
-          </button>
-        )}
-        <label className="field">
-          Close room
-          <div className="admin-inline-action">
-            <input
-              value={adminRoomCode}
-              placeholder="ABC123"
-              maxLength={8}
-              onChange={(event) => setAdminRoomCode(event.target.value.toUpperCase())}
-            />
+          {adminVerified && (
             <button
-              className="secondary compact-action"
+              className="icon-button danger-action"
               type="button"
-              disabled={adminBusy || !adminRoomCode.trim()}
+              disabled={adminBusy}
               onClick={() => {
-                if (confirmCloseRoom(adminRoomCode)) {
-                  void runAdminAction(
-                    () => adminCloseLobby(adminToken.trim(), adminRoomCode.trim()).then(() => undefined),
-                    `Room ${adminRoomCode.trim()} closed.`
-                  );
+                if (window.confirm("Are you sure you want to clear all open lobbies?")) {
+                  void runAdminAction(() => adminClearLobbies(adminToken.trim()).then(() => undefined), "Open lobbies cleared.");
                 }
               }}
             >
-              Close
+              <Trash2 size={18} />
+              Clear lobbies
             </button>
-          </div>
-        </label>
-        <button
-          className="secondary danger-action"
-          type="button"
-          disabled={adminBusy}
-          onClick={() => void runAdminAction(() => adminResetLeaderboard(adminToken.trim()).then(() => undefined), "Global leaderboard reset.")}
-        >
-          Reset global leaderboard
-        </button>
+          )}
+        </div>
+        {adminVerified && (
+          <>
+            <button
+              className="secondary compact-action"
+              type="button"
+              disabled={adminBusy}
+              onClick={() => {
+                clearAdminToken();
+                setRememberAdminToken(false);
+                onAdminTokenChange("", false);
+                onAdminVerified(false);
+                setAdminStatus(null);
+                setAdminMessage("Admin token cleared.");
+              }}
+            >
+              Forget admin token
+            </button>
+            <label className="field">
+              Close room
+              <div className="admin-inline-action">
+                <input
+                  value={adminRoomCode}
+                  placeholder="ABC123"
+                  maxLength={8}
+                  onChange={(event) => setAdminRoomCode(event.target.value.toUpperCase())}
+                />
+                <button
+                  className="secondary compact-action"
+                  type="button"
+                  disabled={adminBusy || !adminRoomCode.trim()}
+                  onClick={() => {
+                    if (confirmCloseRoom(adminRoomCode)) {
+                      void runAdminAction(
+                        () => adminCloseLobby(adminToken.trim(), adminRoomCode.trim()).then(() => undefined),
+                        `Room ${adminRoomCode.trim()} closed.`
+                      );
+                    }
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </label>
+            <button
+              className="secondary danger-action"
+              type="button"
+              disabled={adminBusy}
+              onClick={() => void runAdminAction(() => adminResetLeaderboard(adminToken.trim()).then(() => undefined), "Global leaderboard reset.")}
+            >
+              Reset global leaderboard
+            </button>
+          </>
+        )}
         {adminStatus && (
           <div className="admin-status-grid">
             <div>
