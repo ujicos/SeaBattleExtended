@@ -27,6 +27,7 @@ export function StatsPanel({
   onPrestige?: () => void;
 }) {
   const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalLeaderboardPlayer[]>([]);
+  const [leaderboardPage, setLeaderboardPage] = useState(0);
   const rank = getRankProgress(stats.xp);
   const xpIntoRank = stats.xp - rank.currentXp;
   const xpNeeded = rank.nextXp - rank.currentXp;
@@ -44,20 +45,17 @@ export function StatsPanel({
     ["Fastest win", duration(stats.fastestWinMs)],
     ["Longest game", duration(stats.longestGameMs)]
   ];
-  const opponentLeaderboard = Object.entries(stats.opponents)
-    .map(([playerId, opponent]) => ({
-      playerId,
-      ...opponent,
-      winRate: opponent.games ? Math.round((opponent.wins / opponent.games) * 100) : 0
-    }))
-    .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.games - a.games)
-    .slice(0, 5);
+  const leaderboardPageSize = 10;
+  const leaderboardPageCount = Math.max(1, Math.ceil(globalLeaderboard.length / leaderboardPageSize));
+  const leaderboardStart = leaderboardPage * leaderboardPageSize;
+  const leaderboardPlayers = globalLeaderboard.slice(leaderboardStart, leaderboardStart + leaderboardPageSize);
 
   useEffect(() => {
     let active = true;
     void fetchGlobalLeaderboard().then((players) => {
       if (active) {
         setGlobalLeaderboard(players);
+        setLeaderboardPage((page) => Math.min(page, Math.max(0, Math.ceil(players.length / leaderboardPageSize) - 1)));
       }
     });
     return () => {
@@ -102,12 +100,12 @@ export function StatsPanel({
       <div className="leaderboard-panel">
         <div className="section-title">
           <span>Global leaderboard</span>
-          <small>D1</small>
+          <small>{globalLeaderboard.length ? `Page ${leaderboardPage + 1}/${leaderboardPageCount}` : "D1"}</small>
         </div>
         {globalLeaderboard.length ? (
-          globalLeaderboard.slice(0, 8).map((player, index) => (
+          leaderboardPlayers.map((player, index) => (
             <div className="leaderboard-row" key={player.playerId}>
-              <span>#{index + 1} {player.displayName}</span>
+              <span>#{leaderboardStart + index + 1} {player.displayName}</span>
               <strong>P{player.prestige} R{player.rank}</strong>
               <small>{player.lifetimeXp} XP</small>
             </div>
@@ -119,24 +117,17 @@ export function StatsPanel({
             <small>D1</small>
           </div>
         )}
-      </div>
-      <div className="leaderboard-panel">
-        <div className="section-title">
-          <span>Local rivals</span>
-          <small>device</small>
-        </div>
-        <div className="leaderboard-row self">
-          <span>#1 You</span>
-          <strong>Rank {rank.rank}</strong>
-          <small>{stats.lifetimeXp} XP</small>
-        </div>
-        {opponentLeaderboard.map((opponent, index) => (
-          <div className="leaderboard-row" key={opponent.playerId}>
-            <span>#{index + 2} {opponent.displayName}</span>
-            <strong>{opponent.wins} wins</strong>
-            <small>{opponent.winRate}% WR</small>
+        {globalLeaderboard.length > leaderboardPageSize && (
+          <div className="leaderboard-controls">
+            <button className="secondary compact-action" type="button" disabled={leaderboardPage === 0} onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}>
+              Previous
+            </button>
+            <small>{leaderboardStart + 1}-{Math.min(globalLeaderboard.length, leaderboardStart + leaderboardPageSize)} of {globalLeaderboard.length}</small>
+            <button className="secondary compact-action" type="button" disabled={leaderboardPage >= leaderboardPageCount - 1} onClick={() => setLeaderboardPage((page) => Math.min(leaderboardPageCount - 1, page + 1))}>
+              Next
+            </button>
           </div>
-        ))}
+        )}
       </div>
       <div className="history">
         {stats.history.slice(0, 5).map((match) => (

@@ -2461,7 +2461,7 @@ function App() {
       )}
 
       {activeTab === "lobby" && (
-        <div className="content-grid lobby-grid">
+        <div className={roomCode ? "content-grid lobby-grid" : "content-grid lobby-grid lobby-grid-empty"}>
           <section className="panel lobby-actions-panel">
             <div className="section-title">
               <span>P2P Lobby</span>

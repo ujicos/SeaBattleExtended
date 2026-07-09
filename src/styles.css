@@ -297,6 +297,11 @@ small,
   grid-template-columns: minmax(360px, 430px) minmax(480px, 1fr);
 }
 
+.lobby-grid-empty {
+  grid-template-columns: minmax(360px, 520px);
+  justify-content: center;
+}
+
 .lobby-actions-panel,
 .lobby-opponent-panel {
   min-height: 100%;
@@ -1527,6 +1532,17 @@ select {
   white-space: nowrap;
 }
 
+.leaderboard-controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.leaderboard-controls small {
+  text-align: center;
+}
+
 .achievement-card {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr);
@@ -1564,7 +1580,7 @@ select {
 }
 
 .reset-stats-button {
-  width: min(220px, 100%);
+  width: 100%;
   margin-bottom: 12px;
 }
 
