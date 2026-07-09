@@ -1570,10 +1570,26 @@ select {
   border-radius: 12px;
   color: inherit;
   background: rgba(255, 255, 255, 0.05);
-  cursor: pointer;
 }
 
-.lobby-row strong {
+.lobby-join-button {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lobby-row strong,
+.lobby-join-button strong {
   letter-spacing: 0.08em;
 }
 
@@ -1670,6 +1686,29 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+}
+
+.toggle-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.toggle-card input {
+  flex: 0 0 auto;
+}
+
+.toggle-card span {
+  display: grid;
+  gap: 2px;
+}
+
+.compact-toggle {
+  margin: 0;
 }
 
 .admin-status-grid {

@@ -6,6 +6,8 @@ type StatusListener = (status: string) => void;
 const defaultSignalingUrl =
   import.meta.env.VITE_SIGNALING_URL ??
   "wss://seabattle-extended.yohabbodude.workers.dev";
+const adminTokenSessionKey = "sea-battle.admin-token";
+const adminTokenLocalKey = "sea-battle.admin-token.remembered";
 
 export interface LobbySummary {
   roomCode: string;
@@ -37,6 +39,29 @@ export interface AdminStatus extends PresenceStatus {
     available: boolean;
     players: number;
   };
+}
+
+export function loadAdminToken(): { token: string; remembered: boolean } {
+  const remembered = localStorage.getItem(adminTokenLocalKey);
+  if (remembered) {
+    return { token: remembered, remembered: true };
+  }
+  return { token: sessionStorage.getItem(adminTokenSessionKey) ?? "", remembered: false };
+}
+
+export function saveAdminToken(token: string, remember: boolean): void {
+  const trimmed = token.trim();
+  sessionStorage.setItem(adminTokenSessionKey, trimmed);
+  if (remember) {
+    localStorage.setItem(adminTokenLocalKey, trimmed);
+  } else {
+    localStorage.removeItem(adminTokenLocalKey);
+  }
+}
+
+export function clearAdminToken(): void {
+  sessionStorage.removeItem(adminTokenSessionKey);
+  localStorage.removeItem(adminTokenLocalKey);
 }
 
 function signalingHttpUrl(pathname: string, signalingUrl = defaultSignalingUrl): URL {

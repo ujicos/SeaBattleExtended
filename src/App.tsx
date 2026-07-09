@@ -11,7 +11,19 @@ import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createBoardForSettings, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { assets } from "./services/assets";
 import { audio } from "./services/audio";
-import { fetchPresenceStatus, leavePresence, PeerGameClient, pingPresence, submitGlobalLeaderboard, type LobbySummary, type PresenceStatus } from "./services/network";
+import {
+  adminCloseLobby,
+  fetchAdminStatus,
+  fetchPresenceStatus,
+  leavePresence,
+  loadAdminToken,
+  PeerGameClient,
+  pingPresence,
+  saveAdminToken,
+  submitGlobalLeaderboard,
+  type LobbySummary,
+  type PresenceStatus
+} from "./services/network";
 import {
   loadProfile,
   loadStats,
@@ -256,6 +268,8 @@ function App() {
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
   const [presenceStatus, setPresenceStatus] = useState<PresenceStatus>({ onlinePlayers: 1, activeGames: 0, lobbies: [] });
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
+  const [adminToken, setAdminToken] = useState(() => loadAdminToken().token);
+  const [adminVerified, setAdminVerified] = useState(false);
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -602,6 +616,28 @@ function App() {
     audio.setEffectsEnabled(audioMode !== "muted");
     audio.setMusicEnabled(audioMode === "on");
   }, [audioMode]);
+
+  useEffect(() => {
+    if (!adminToken.trim()) {
+      setAdminVerified(false);
+      return;
+    }
+    let active = true;
+    void fetchAdminStatus(adminToken.trim())
+      .then(() => {
+        if (active) {
+          setAdminVerified(true);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAdminVerified(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [adminToken]);
 
   useEffect(() => {
     const resumeAudio = () => {
@@ -1159,6 +1195,27 @@ function App() {
     setOpenLobbies(status.lobbies);
   }
 
+  function updateAdminToken(token: string, remember: boolean): void {
+    setAdminToken(token);
+    saveAdminToken(token, remember);
+    if (!token.trim()) {
+      setAdminVerified(false);
+    }
+  }
+
+  async function closeLobbyAsAdmin(code: string): Promise<void> {
+    const normalized = code.trim().toUpperCase();
+    if (!adminVerified || !adminToken.trim() || !normalized) {
+      return;
+    }
+    await adminCloseLobby(adminToken.trim(), normalized);
+    showEventToast(`Room ${normalized} closed`);
+    await refreshOpenLobbies();
+    if (normalized === roomCode) {
+      leaveOrForfeit();
+    }
+  }
+
   async function joinRoom(roomCodeOverride = joinCode) {
     const codeToJoin = roomCodeOverride.trim().toUpperCase();
     if (!codeToJoin) {
@@ -1606,6 +1663,11 @@ function App() {
                       </button>
                     </div>
                   )}
+                  {adminVerified && roomCode && (
+                    <button className="secondary danger-action" type="button" onClick={() => void closeLobbyAsAdmin(roomCode)}>
+                      Close this lobby
+                    </button>
+                  )}
                   <div className="ready-grid">
                     <div className={localReady ? "ready-pill ready" : "ready-pill"}>
                       <small>Your fleet</small>
@@ -1811,15 +1873,21 @@ function App() {
               </div>
               {openLobbies.length ? (
                 openLobbies.map((lobby) => (
-                  <button
-                    className="lobby-row"
-                    type="button"
-                    key={lobby.roomCode}
-                    onClick={() => void joinRoom(lobby.roomCode)}
-                  >
-                    <strong>{lobby.roomCode}</strong>
-                    <small>{Math.max(0, Math.round((Date.now() - lobby.updatedAt) / 60000))}m ago</small>
-                  </button>
+                  <div className="lobby-row" key={lobby.roomCode}>
+                    <button className="lobby-join-button" type="button" onClick={() => void joinRoom(lobby.roomCode)}>
+                      <strong>{lobby.roomCode}</strong>
+                      <small>{Math.max(0, Math.round((Date.now() - lobby.updatedAt) / 60000))}m ago</small>
+                    </button>
+                    {adminVerified && (
+                      <button
+                        className="secondary compact-action danger-action"
+                        type="button"
+                        onClick={() => void closeLobbyAsAdmin(lobby.roomCode)}
+                      >
+                        Close
+                      </button>
+                    )}
+                  </div>
                 ))
               ) : (
                 <small>No open lobbies found.</small>
@@ -1850,6 +1918,10 @@ function App() {
             setProfile(nextProfile);
             setStats(nextStats);
           }}
+          adminToken={adminToken}
+          adminVerified={adminVerified}
+          onAdminTokenChange={updateAdminToken}
+          onAdminVerified={setAdminVerified}
         />
       )}
       {activeTab === "stats" && (

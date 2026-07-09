@@ -1,6 +1,15 @@
 import { Download, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
-import { adminClearLobbies, adminCloseLobby, adminResetLeaderboard, fetchAdminStatus, type AdminStatus } from "../services/network";
+import {
+  adminClearLobbies,
+  adminCloseLobby,
+  adminResetLeaderboard,
+  clearAdminToken,
+  fetchAdminStatus,
+  loadAdminToken,
+  saveAdminToken,
+  type AdminStatus
+} from "../services/network";
 import { exportProfile, importProfile, type PlayerProfile, type PlayerStats } from "../services/storage";
 
 interface ProfilePanelProps {
@@ -8,10 +17,23 @@ interface ProfilePanelProps {
   stats: PlayerStats;
   onProfileChange: (profile: PlayerProfile) => void;
   onImported: (profile: PlayerProfile, stats: PlayerStats) => void;
+  adminToken: string;
+  adminVerified: boolean;
+  onAdminTokenChange: (token: string, remember: boolean) => void;
+  onAdminVerified: (verified: boolean) => void;
 }
 
-export function ProfilePanel({ profile, stats, onProfileChange, onImported }: ProfilePanelProps) {
-  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("sea-battle.admin-token") ?? "");
+export function ProfilePanel({
+  profile,
+  stats,
+  onProfileChange,
+  onImported,
+  adminToken,
+  adminVerified,
+  onAdminTokenChange,
+  onAdminVerified
+}: ProfilePanelProps) {
+  const [rememberAdminToken, setRememberAdminToken] = useState(() => loadAdminToken().remembered);
   const [adminStatus, setAdminStatus] = useState<AdminStatus | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
   const [adminRoomCode, setAdminRoomCode] = useState("");
@@ -25,12 +47,14 @@ export function ProfilePanel({ profile, stats, onProfileChange, onImported }: Pr
     setAdminBusy(true);
     setAdminMessage("");
     try {
-      sessionStorage.setItem("sea-battle.admin-token", adminToken.trim());
+      saveAdminToken(adminToken.trim(), rememberAdminToken);
       await action();
       setAdminMessage(success);
       setAdminStatus(await fetchAdminStatus(adminToken.trim()));
+      onAdminVerified(true);
     } catch (error) {
       setAdminMessage(error instanceof Error ? error.message : "Admin request failed.");
+      onAdminVerified(false);
     } finally {
       setAdminBusy(false);
     }
@@ -102,8 +126,22 @@ export function ProfilePanel({ profile, stats, onProfileChange, onImported }: Pr
             type="password"
             autoComplete="off"
             placeholder="Paste your rotated ADMIN_TOKEN"
-            onChange={(event) => setAdminToken(event.target.value)}
+            onChange={(event) => onAdminTokenChange(event.target.value, rememberAdminToken)}
           />
+        </label>
+        <label className="toggle-card compact-toggle">
+          <input
+            type="checkbox"
+            checked={rememberAdminToken}
+            onChange={(event) => {
+              setRememberAdminToken(event.target.checked);
+              onAdminTokenChange(adminToken, event.target.checked);
+            }}
+          />
+          <span>
+            <strong>Remember token</strong>
+            <small>Stores it in this browser until you clear it.</small>
+          </span>
         </label>
         <div className="action-row">
           <button className="icon-button" type="button" disabled={adminBusy} onClick={() => void refreshAdminStatus()}>
@@ -120,6 +158,23 @@ export function ProfilePanel({ profile, stats, onProfileChange, onImported }: Pr
             Clear lobbies
           </button>
         </div>
+        {adminVerified && (
+          <button
+            className="secondary compact-action"
+            type="button"
+            disabled={adminBusy}
+            onClick={() => {
+              clearAdminToken();
+              setRememberAdminToken(false);
+              onAdminTokenChange("", false);
+              onAdminVerified(false);
+              setAdminStatus(null);
+              setAdminMessage("Admin token cleared.");
+            }}
+          >
+            Forget admin token
+          </button>
+        )}
         <label className="field">
           Close room
           <div className="admin-inline-action">
