@@ -1208,10 +1208,19 @@ function App() {
     if (!adminVerified || !adminToken.trim() || !normalized) {
       return;
     }
+    const isCurrentLobby = normalized === roomCode;
+    const confirmed = window.confirm(
+      isCurrentLobby
+        ? `Are you sure you want to close lobby ${normalized}? This will close your current room.`
+        : `Are you sure you want to close lobby ${normalized}?`
+    );
+    if (!confirmed) {
+      return;
+    }
     await adminCloseLobby(adminToken.trim(), normalized);
     showEventToast(`Room ${normalized} closed`);
     await refreshOpenLobbies();
-    if (normalized === roomCode) {
+    if (isCurrentLobby) {
       leaveOrForfeit();
     }
   }

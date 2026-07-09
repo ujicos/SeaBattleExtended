@@ -66,6 +66,10 @@ export function ProfilePanel({
     }, "Admin access verified.");
   }
 
+  function confirmCloseRoom(roomCode: string): boolean {
+    return window.confirm(`Are you sure you want to close lobby ${roomCode.trim().toUpperCase()}?`);
+  }
+
   return (
     <div className="profile-stack">
       <section className="panel">
@@ -152,7 +156,11 @@ export function ProfilePanel({
             className="icon-button danger-action"
             type="button"
             disabled={adminBusy}
-            onClick={() => void runAdminAction(() => adminClearLobbies(adminToken.trim()).then(() => undefined), "Open lobbies cleared.")}
+            onClick={() => {
+              if (window.confirm("Are you sure you want to clear all open lobbies?")) {
+                void runAdminAction(() => adminClearLobbies(adminToken.trim()).then(() => undefined), "Open lobbies cleared.");
+              }
+            }}
           >
             <Trash2 size={18} />
             Clear lobbies
@@ -188,12 +196,14 @@ export function ProfilePanel({
               className="secondary compact-action"
               type="button"
               disabled={adminBusy || !adminRoomCode.trim()}
-              onClick={() =>
-                void runAdminAction(
-                  () => adminCloseLobby(adminToken.trim(), adminRoomCode.trim()).then(() => undefined),
-                  `Room ${adminRoomCode.trim()} closed.`
-                )
-              }
+              onClick={() => {
+                if (confirmCloseRoom(adminRoomCode)) {
+                  void runAdminAction(
+                    () => adminCloseLobby(adminToken.trim(), adminRoomCode.trim()).then(() => undefined),
+                    `Room ${adminRoomCode.trim()} closed.`
+                  );
+                }
+              }}
             >
               Close
             </button>
@@ -231,12 +241,14 @@ export function ProfilePanel({
                 type="button"
                 key={lobby.roomCode}
                 disabled={adminBusy}
-                onClick={() =>
-                  void runAdminAction(
-                    () => adminCloseLobby(adminToken.trim(), lobby.roomCode).then(() => undefined),
-                    `Room ${lobby.roomCode} closed.`
-                  )
-                }
+                onClick={() => {
+                  if (confirmCloseRoom(lobby.roomCode)) {
+                    void runAdminAction(
+                      () => adminCloseLobby(adminToken.trim(), lobby.roomCode).then(() => undefined),
+                      `Room ${lobby.roomCode} closed.`
+                    );
+                  }
+                }}
               >
                 Close {lobby.roomCode}
               </button>
