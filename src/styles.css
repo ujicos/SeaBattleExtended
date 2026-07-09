@@ -1656,6 +1656,51 @@ select {
   cursor: pointer;
 }
 
+.profile-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-inline-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.admin-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-status-grid div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.admin-status-grid strong {
+  font-size: 1.25rem;
+}
+
+.admin-lobby-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-message {
+  color: #9fe9df;
+}
+
 @media (min-width: 980px) {
   .topbar {
     padding: 16px 18px;

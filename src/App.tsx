@@ -11,11 +11,12 @@ import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createBoardForSettings, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { assets } from "./services/assets";
 import { audio } from "./services/audio";
-import { fetchPresenceStatus, leavePresence, PeerGameClient, pingPresence, type LobbySummary, type PresenceStatus } from "./services/network";
+import { fetchPresenceStatus, leavePresence, PeerGameClient, pingPresence, submitGlobalLeaderboard, type LobbySummary, type PresenceStatus } from "./services/network";
 import {
   loadProfile,
   loadStats,
   getAchievement,
+  getRankProgress,
   makeIdentity,
   makeEmptyStats,
   awardXp,
@@ -576,6 +577,25 @@ function App() {
   useEffect(() => {
     saveStats(stats);
   }, [stats]);
+
+  useEffect(() => {
+    const rank = getRankProgress(stats.xp);
+    const timeout = window.setTimeout(() => {
+      void submitGlobalLeaderboard({
+        playerId: profile.playerId,
+        displayName: profile.displayName,
+        lifetimeXp: stats.lifetimeXp,
+        xp: stats.xp,
+        prestige: stats.prestige,
+        rank: rank.rank,
+        wins: stats.wins,
+        losses: stats.losses,
+        games: stats.totalGames,
+        shipsDestroyed: stats.shipsDestroyed
+      }).catch(() => undefined);
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [profile.displayName, profile.playerId, stats.lifetimeXp, stats.losses, stats.prestige, stats.shipsDestroyed, stats.totalGames, stats.wins, stats.xp]);
 
   useEffect(() => {
     localStorage.setItem(audioModeKey, audioMode);

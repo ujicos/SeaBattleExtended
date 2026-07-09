@@ -18,6 +18,27 @@ export interface PresenceStatus {
   lobbies: LobbySummary[];
 }
 
+export interface GlobalLeaderboardPlayer {
+  playerId: string;
+  displayName: string;
+  lifetimeXp: number;
+  xp: number;
+  prestige: number;
+  rank: number;
+  wins: number;
+  losses: number;
+  games: number;
+  shipsDestroyed: number;
+  updatedAt: number;
+}
+
+export interface AdminStatus extends PresenceStatus {
+  leaderboard?: {
+    available: boolean;
+    players: number;
+  };
+}
+
 function signalingHttpUrl(pathname: string, signalingUrl = defaultSignalingUrl): URL {
   const url = new URL(signalingUrl);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
@@ -73,6 +94,76 @@ export function leavePresence(sessionId: string, signalingUrl = defaultSignaling
   const url = signalingHttpUrl("/presence", signalingUrl);
   url.searchParams.set("session", sessionId);
   void fetch(url.toString(), { method: "DELETE", keepalive: true }).catch(() => undefined);
+}
+
+export async function fetchGlobalLeaderboard(signalingUrl = defaultSignalingUrl): Promise<GlobalLeaderboardPlayer[]> {
+  const url = signalingHttpUrl("/leaderboard", signalingUrl);
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) {
+    return [];
+  }
+  const data = (await response.json()) as { players?: GlobalLeaderboardPlayer[] };
+  return data.players ?? [];
+}
+
+export async function submitGlobalLeaderboard(
+  player: Omit<GlobalLeaderboardPlayer, "updatedAt">,
+  signalingUrl = defaultSignalingUrl
+): Promise<void> {
+  const url = signalingHttpUrl("/leaderboard", signalingUrl);
+  await fetch(url.toString(), {
+    method: "POST",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(player)
+  });
+}
+
+async function fetchAdmin<T>(
+  token: string,
+  pathname: string,
+  init: RequestInit = {},
+  signalingUrl = defaultSignalingUrl
+): Promise<T> {
+  const url = signalingHttpUrl(pathname, signalingUrl);
+  const response = await fetch(url.toString(), {
+    ...init,
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      ...init.headers
+    }
+  });
+  const data = (await response.json()) as T & { ok?: boolean; error?: string };
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error ?? `Admin request failed (${response.status})`);
+  }
+  return data;
+}
+
+export function fetchAdminStatus(token: string, signalingUrl = defaultSignalingUrl): Promise<AdminStatus> {
+  return fetchAdmin<AdminStatus>(token, "/admin/status", {}, signalingUrl);
+}
+
+export function adminCloseLobby(token: string, roomCode: string, signalingUrl = defaultSignalingUrl): Promise<{ ok: boolean }> {
+  return fetchAdmin<{ ok: boolean }>(
+    token,
+    "/admin/close-lobby",
+    {
+      method: "POST",
+      body: JSON.stringify({ roomCode })
+    },
+    signalingUrl
+  );
+}
+
+export function adminClearLobbies(token: string, signalingUrl = defaultSignalingUrl): Promise<{ ok: boolean }> {
+  return fetchAdmin<{ ok: boolean }>(token, "/admin/clear-lobbies", { method: "POST" }, signalingUrl);
+}
+
+export function adminResetLeaderboard(token: string, signalingUrl = defaultSignalingUrl): Promise<{ ok: boolean }> {
+  return fetchAdmin<{ ok: boolean }>(token, "/admin/reset-leaderboard", { method: "POST" }, signalingUrl);
 }
 
 export class PeerGameClient {

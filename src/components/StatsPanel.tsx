@@ -1,4 +1,6 @@
 import { X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { fetchGlobalLeaderboard, type GlobalLeaderboardPlayer } from "../services/network";
 import { getRankProgress, maxRank, xpForRank, type PlayerStats } from "../services/storage";
 
 function percent(part: number, total: number): string {
@@ -24,6 +26,7 @@ export function StatsPanel({
   onResetStats?: () => void;
   onPrestige?: () => void;
 }) {
+  const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalLeaderboardPlayer[]>([]);
   const rank = getRankProgress(stats.xp);
   const xpIntoRank = stats.xp - rank.currentXp;
   const xpNeeded = rank.nextXp - rank.currentXp;
@@ -49,6 +52,18 @@ export function StatsPanel({
     }))
     .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.games - a.games)
     .slice(0, 5);
+
+  useEffect(() => {
+    let active = true;
+    void fetchGlobalLeaderboard().then((players) => {
+      if (active) {
+        setGlobalLeaderboard(players);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [stats.lifetimeXp]);
 
   return (
     <section className="panel">
@@ -86,8 +101,29 @@ export function StatsPanel({
       </div>
       <div className="leaderboard-panel">
         <div className="section-title">
-          <span>Rank leaderboard</span>
-          <small>local</small>
+          <span>Global leaderboard</span>
+          <small>D1</small>
+        </div>
+        {globalLeaderboard.length ? (
+          globalLeaderboard.slice(0, 8).map((player, index) => (
+            <div className="leaderboard-row" key={player.playerId}>
+              <span>#{index + 1} {player.displayName}</span>
+              <strong>P{player.prestige} R{player.rank}</strong>
+              <small>{player.lifetimeXp} XP</small>
+            </div>
+          ))
+        ) : (
+          <div className="leaderboard-row">
+            <span>No global ranks yet</span>
+            <strong>-</strong>
+            <small>D1</small>
+          </div>
+        )}
+      </div>
+      <div className="leaderboard-panel">
+        <div className="section-title">
+          <span>Local rivals</span>
+          <small>device</small>
         </div>
         <div className="leaderboard-row self">
           <span>#1 You</span>

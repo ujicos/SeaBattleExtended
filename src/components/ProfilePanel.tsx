@@ -1,4 +1,6 @@
-import { Download, Upload } from "lucide-react";
+import { Download, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { useState } from "react";
+import { adminClearLobbies, adminCloseLobby, adminResetLeaderboard, fetchAdminStatus, type AdminStatus } from "../services/network";
 import { exportProfile, importProfile, type PlayerProfile, type PlayerStats } from "../services/storage";
 
 interface ProfilePanelProps {
@@ -9,51 +11,185 @@ interface ProfilePanelProps {
 }
 
 export function ProfilePanel({ profile, stats, onProfileChange, onImported }: ProfilePanelProps) {
+  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("sea-battle.admin-token") ?? "");
+  const [adminStatus, setAdminStatus] = useState<AdminStatus | null>(null);
+  const [adminMessage, setAdminMessage] = useState("");
+  const [adminRoomCode, setAdminRoomCode] = useState("");
+  const [adminBusy, setAdminBusy] = useState(false);
+
+  async function runAdminAction(action: () => Promise<void>, success: string): Promise<void> {
+    if (!adminToken.trim()) {
+      setAdminMessage("Paste your admin token first.");
+      return;
+    }
+    setAdminBusy(true);
+    setAdminMessage("");
+    try {
+      sessionStorage.setItem("sea-battle.admin-token", adminToken.trim());
+      await action();
+      setAdminMessage(success);
+      setAdminStatus(await fetchAdminStatus(adminToken.trim()));
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : "Admin request failed.");
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  function refreshAdminStatus(): Promise<void> {
+    return runAdminAction(async () => {
+      setAdminStatus(await fetchAdminStatus(adminToken.trim()));
+    }, "Admin access verified.");
+  }
+
   return (
-    <section className="panel">
-      <div className="section-title">
-        <span>Profile</span>
-        <small>{profile.playerId}</small>
-      </div>
-      <label className="field">
-        Display name
-        <input
-          value={profile.displayName}
-          maxLength={24}
-          onChange={(event) => onProfileChange({ ...profile, displayName: event.target.value })}
-        />
-      </label>
-      <label className="field">
-        Avatar token
-        <input value={profile.avatar} maxLength={18} onChange={(event) => onProfileChange({ ...profile, avatar: event.target.value })} />
-      </label>
-      <div className="action-row">
-        <button
-          className="icon-button"
-          type="button"
-          title="Export profile"
-          onClick={() => navigator.clipboard?.writeText(exportProfile(profile, stats))}
-        >
-          <Download size={18} />
-          Export
-        </button>
-        <label className="icon-button file-button" title="Import profile">
-          <Upload size={18} />
-          Import
+    <div className="profile-stack">
+      <section className="panel">
+        <div className="section-title">
+          <span>Profile</span>
+          <small>{profile.playerId}</small>
+        </div>
+        <label className="field">
+          Display name
           <input
-            type="file"
-            accept="application/json"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              if (!file) {
-                return;
-              }
-              const bundle = importProfile(await file.text());
-              onImported(bundle.profile, bundle.stats);
-            }}
+            value={profile.displayName}
+            maxLength={24}
+            onChange={(event) => onProfileChange({ ...profile, displayName: event.target.value })}
           />
         </label>
-      </div>
-    </section>
+        <label className="field">
+          Avatar token
+          <input value={profile.avatar} maxLength={18} onChange={(event) => onProfileChange({ ...profile, avatar: event.target.value })} />
+        </label>
+        <div className="action-row">
+          <button
+            className="icon-button"
+            type="button"
+            title="Export profile"
+            onClick={() => navigator.clipboard?.writeText(exportProfile(profile, stats))}
+          >
+            <Download size={18} />
+            Export
+          </button>
+          <label className="icon-button file-button" title="Import profile">
+            <Upload size={18} />
+            Import
+            <input
+              type="file"
+              accept="application/json"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) {
+                  return;
+                }
+                const bundle = importProfile(await file.text());
+                onImported(bundle.profile, bundle.stats);
+              }}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="panel admin-panel">
+        <div className="section-title">
+          <span>Developer admin</span>
+          <small>Worker protected</small>
+        </div>
+        <label className="field">
+          Admin token
+          <input
+            value={adminToken}
+            type="password"
+            autoComplete="off"
+            placeholder="Paste your rotated ADMIN_TOKEN"
+            onChange={(event) => setAdminToken(event.target.value)}
+          />
+        </label>
+        <div className="action-row">
+          <button className="icon-button" type="button" disabled={adminBusy} onClick={() => void refreshAdminStatus()}>
+            <ShieldAlert size={18} />
+            Verify
+          </button>
+          <button
+            className="icon-button danger-action"
+            type="button"
+            disabled={adminBusy}
+            onClick={() => void runAdminAction(() => adminClearLobbies(adminToken.trim()).then(() => undefined), "Open lobbies cleared.")}
+          >
+            <Trash2 size={18} />
+            Clear lobbies
+          </button>
+        </div>
+        <label className="field">
+          Close room
+          <div className="admin-inline-action">
+            <input
+              value={adminRoomCode}
+              placeholder="ABC123"
+              maxLength={8}
+              onChange={(event) => setAdminRoomCode(event.target.value.toUpperCase())}
+            />
+            <button
+              className="secondary compact-action"
+              type="button"
+              disabled={adminBusy || !adminRoomCode.trim()}
+              onClick={() =>
+                void runAdminAction(
+                  () => adminCloseLobby(adminToken.trim(), adminRoomCode.trim()).then(() => undefined),
+                  `Room ${adminRoomCode.trim()} closed.`
+                )
+              }
+            >
+              Close
+            </button>
+          </div>
+        </label>
+        <button
+          className="secondary danger-action"
+          type="button"
+          disabled={adminBusy}
+          onClick={() => void runAdminAction(() => adminResetLeaderboard(adminToken.trim()).then(() => undefined), "Global leaderboard reset.")}
+        >
+          Reset global leaderboard
+        </button>
+        {adminStatus && (
+          <div className="admin-status-grid">
+            <div>
+              <small>Online</small>
+              <strong>{adminStatus.onlinePlayers}</strong>
+            </div>
+            <div>
+              <small>Games</small>
+              <strong>{adminStatus.activeGames}</strong>
+            </div>
+            <div>
+              <small>Leaderboard</small>
+              <strong>{adminStatus.leaderboard?.available ? adminStatus.leaderboard.players : "off"}</strong>
+            </div>
+          </div>
+        )}
+        {adminStatus?.lobbies.length ? (
+          <div className="admin-lobby-list">
+            {adminStatus.lobbies.map((lobby) => (
+              <button
+                className="secondary compact-action"
+                type="button"
+                key={lobby.roomCode}
+                disabled={adminBusy}
+                onClick={() =>
+                  void runAdminAction(
+                    () => adminCloseLobby(adminToken.trim(), lobby.roomCode).then(() => undefined),
+                    `Room ${lobby.roomCode} closed.`
+                  )
+                }
+              >
+                Close {lobby.roomCode}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {adminMessage && <small className="admin-message">{adminMessage}</small>}
+      </section>
+    </div>
   );
 }

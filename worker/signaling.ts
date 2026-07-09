@@ -1,6 +1,8 @@
 interface Env {
   ROOMS: DurableObjectNamespace;
   LOBBIES: DurableObjectNamespace;
+  ADMIN_TOKEN?: string;
+  DB_Leaderboard?: D1Database;
 }
 
 interface JoinMessage {
@@ -26,6 +28,19 @@ interface PresenceRecord {
   updatedAt: number;
 }
 
+interface LeaderboardPlayer {
+  playerId: string;
+  displayName: string;
+  lifetimeXp: number;
+  xp: number;
+  prestige: number;
+  rank: number;
+  wins: number;
+  losses: number;
+  games: number;
+  shipsDestroyed: number;
+}
+
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
     ...init,
@@ -35,6 +50,140 @@ function json(data: unknown, init?: ResponseInit): Response {
       ...init?.headers
     }
   });
+}
+
+function unauthorized(): Response {
+  return json({ ok: false, error: "Admin token required" }, { status: 401 });
+}
+
+function hasAdminAccess(request: Request, env: Env): boolean {
+  const token = env.ADMIN_TOKEN;
+  if (!token) {
+    return false;
+  }
+  return request.headers.get("authorization") === `Bearer ${token}`;
+}
+
+async function ensureLeaderboard(env: Env): Promise<boolean> {
+  if (!env.DB_Leaderboard) {
+    return false;
+  }
+  await env.DB_Leaderboard.prepare(`
+    CREATE TABLE IF NOT EXISTS leaderboard_players (
+      player_id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      lifetime_xp INTEGER NOT NULL DEFAULT 0,
+      xp INTEGER NOT NULL DEFAULT 0,
+      prestige INTEGER NOT NULL DEFAULT 0,
+      rank INTEGER NOT NULL DEFAULT 1,
+      wins INTEGER NOT NULL DEFAULT 0,
+      losses INTEGER NOT NULL DEFAULT 0,
+      games INTEGER NOT NULL DEFAULT 0,
+      ships_destroyed INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    )
+  `).run();
+  await env.DB_Leaderboard.prepare(`
+    CREATE INDEX IF NOT EXISTS idx_leaderboard_rank
+    ON leaderboard_players(prestige DESC, lifetime_xp DESC, wins DESC)
+  `).run();
+  return true;
+}
+
+async function leaderboardStatus(env: Env): Promise<{ available: boolean; players: number }> {
+  const available = await ensureLeaderboard(env);
+  if (!available || !env.DB_Leaderboard) {
+    return { available: false, players: 0 };
+  }
+  const row = await env.DB_Leaderboard.prepare("SELECT COUNT(*) AS count FROM leaderboard_players").first<{ count: number }>();
+  return { available: true, players: row?.count ?? 0 };
+}
+
+function numberFrom(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback;
+}
+
+function sanitizePlayer(body: Record<string, unknown>): LeaderboardPlayer | null {
+  const playerId = String(body.playerId ?? "").trim().slice(0, 80);
+  const displayName = String(body.displayName ?? "").trim().slice(0, 32);
+  if (!playerId || !displayName) {
+    return null;
+  }
+  return {
+    playerId,
+    displayName,
+    lifetimeXp: numberFrom(body.lifetimeXp),
+    xp: numberFrom(body.xp),
+    prestige: numberFrom(body.prestige),
+    rank: Math.max(1, numberFrom(body.rank, 1)),
+    wins: numberFrom(body.wins),
+    losses: numberFrom(body.losses),
+    games: numberFrom(body.games),
+    shipsDestroyed: numberFrom(body.shipsDestroyed)
+  };
+}
+
+async function leaderboardResponse(request: Request, env: Env): Promise<Response> {
+  const available = await ensureLeaderboard(env);
+  if (!available || !env.DB_Leaderboard) {
+    return json({ ok: false, error: "Leaderboard database is not bound" }, { status: 503 });
+  }
+
+  if (request.method === "POST") {
+    const player = sanitizePlayer(await request.json() as Record<string, unknown>);
+    if (!player) {
+      return json({ ok: false, error: "Missing playerId or displayName" }, { status: 400 });
+    }
+    await env.DB_Leaderboard.prepare(`
+      INSERT INTO leaderboard_players (
+        player_id, display_name, lifetime_xp, xp, prestige, rank, wins, losses, games, ships_destroyed, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(player_id) DO UPDATE SET
+        display_name = excluded.display_name,
+        lifetime_xp = excluded.lifetime_xp,
+        xp = excluded.xp,
+        prestige = excluded.prestige,
+        rank = excluded.rank,
+        wins = excluded.wins,
+        losses = excluded.losses,
+        games = excluded.games,
+        ships_destroyed = excluded.ships_destroyed,
+        updated_at = excluded.updated_at
+    `).bind(
+      player.playerId,
+      player.displayName,
+      player.lifetimeXp,
+      player.xp,
+      player.prestige,
+      player.rank,
+      player.wins,
+      player.losses,
+      player.games,
+      player.shipsDestroyed,
+      Date.now()
+    ).run();
+    return json({ ok: true });
+  }
+
+  const rows = await env.DB_Leaderboard.prepare(`
+    SELECT
+      player_id AS playerId,
+      display_name AS displayName,
+      lifetime_xp AS lifetimeXp,
+      xp,
+      prestige,
+      rank,
+      wins,
+      losses,
+      games,
+      ships_destroyed AS shipsDestroyed,
+      updated_at AS updatedAt
+    FROM leaderboard_players
+    ORDER BY prestige DESC, lifetime_xp DESC, wins DESC
+    LIMIT 50
+  `).all();
+  return json({ ok: true, players: rows.results ?? [] });
 }
 
 function serviceInfo(request: Request): Response {
@@ -57,13 +206,56 @@ export default {
         headers: {
           "access-control-allow-origin": "*",
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-          "access-control-allow-headers": "content-type"
+          "access-control-allow-headers": "authorization, content-type"
         }
       });
     }
 
     if (url.pathname === "/health") {
       return serviceInfo(request);
+    }
+
+    if (url.pathname === "/leaderboard") {
+      return leaderboardResponse(request, env);
+    }
+
+    if (url.pathname.startsWith("/admin")) {
+      if (!hasAdminAccess(request, env)) {
+        return unauthorized();
+      }
+      const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
+
+      if (url.pathname === "/admin/status") {
+        const status = await registry.fetch("https://registry/status");
+        const registryStatus = await status.json() as Record<string, unknown>;
+        return json({ ok: true, ...registryStatus, leaderboard: await leaderboardStatus(env) });
+      }
+
+      if (url.pathname === "/admin/clear-lobbies" && request.method === "POST") {
+        await registry.fetch("https://registry/admin/clear-lobbies", { method: "POST" });
+        return json({ ok: true });
+      }
+
+      if (url.pathname === "/admin/close-lobby" && request.method === "POST") {
+        const body = await request.json() as { roomCode?: string };
+        const roomCode = body.roomCode?.trim().toUpperCase();
+        if (!roomCode) {
+          return json({ ok: false, error: "Missing roomCode" }, { status: 400 });
+        }
+        const room = env.ROOMS.get(env.ROOMS.idFromName(roomCode));
+        await room.fetch("https://room/admin/close", { method: "POST" });
+        await registry.fetch(`https://registry/lobbies?room=${encodeURIComponent(roomCode)}`, { method: "DELETE" });
+        return json({ ok: true });
+      }
+
+      if (url.pathname === "/admin/reset-leaderboard" && request.method === "POST") {
+        if (await ensureLeaderboard(env)) {
+          await env.DB_Leaderboard?.prepare("DELETE FROM leaderboard_players").run();
+        }
+        return json({ ok: true });
+      }
+
+      return json({ ok: false, error: "Unknown admin action" }, { status: 404 });
     }
 
     if (url.pathname === "/lobbies" || url.pathname === "/presence" || url.pathname === "/status") {
@@ -121,7 +313,7 @@ export class LobbyRegistry {
         headers: {
           "access-control-allow-origin": "*",
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-          "access-control-allow-headers": "content-type"
+          "access-control-allow-headers": "authorization, content-type"
         }
       });
     }
@@ -162,6 +354,11 @@ export class LobbyRegistry {
       await this.state.storage.put("lobbies", lobbies);
       await this.state.storage.put("presence", presence);
       return json({ ok: true, onlinePlayers: presence.length, activeGames: lobbies.length, lobbies });
+    }
+
+    if (url.pathname === "/admin/clear-lobbies" && request.method === "POST") {
+      await this.state.storage.put("lobbies", []);
+      return json({ ok: true });
     }
 
     if (request.method === "POST") {
@@ -221,11 +418,23 @@ export class SignalingRoom {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/admin/close" && request.method === "POST") {
+      const message = JSON.stringify({ type: "admin-close", reason: "Room closed by admin" });
+      for (const [socket] of this.sessions) {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(message);
+          socket.close(4001, "Room closed by admin");
+        }
+      }
+      this.sessions.clear();
+      return json({ ok: true });
+    }
+
     if (request.headers.get("upgrade") !== "websocket") {
       return json({ ok: false, error: "Expected WebSocket upgrade" }, { status: 426 });
     }
 
-    const url = new URL(request.url);
     const roomCode = url.searchParams.get("room")?.trim().toUpperCase();
     const role = url.searchParams.get("role") === "guest" ? "guest" : "host";
 

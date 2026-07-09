@@ -127,6 +127,27 @@ Important: GitHub Pages cannot run WebSocket signaling. The game UI and local pr
 VITE_SIGNALING_URL=wss://your-signaling-host.example npm run build
 ```
 
+## Admin Access
+
+Admin actions are protected by the Cloudflare Worker secret named `ADMIN_TOKEN`. Do not put the token in GitHub Pages secrets, Vite env variables, or source files. Add or rotate it in Cloudflare Worker settings as a secret, then deploy the Worker.
+
+The D1 leaderboard database is bound in `wrangler.toml` as:
+
+```toml
+[[d1_databases]]
+binding = "DB_Leaderboard"
+database_name = "seabattleextended_leaderboard"
+database_id = "91f0e247-d4be-4cd8-baea-b06033aaf9fd"
+```
+
+To use admin controls:
+
+1. Open the site and go to `Profile`.
+2. Paste your current `ADMIN_TOKEN` into `Developer admin`.
+3. Click `Verify`.
+
+The admin panel can view online/game counts, close a room from the lobby registry/signaling room, clear open lobby listings, and reset the global D1 leaderboard. Closing a room can disconnect players that are still using Worker signaling; an already-established WebRTC data channel is direct browser-to-browser, so true mid-match kicking would require relaying gameplay through Cloudflare instead of P2P.
+
 ## Implemented
 
 - Configurable board presets with scaled fleets: 8x8, 9x9, 10x10, 12x12, 14x14, 16x16, and Large Battle 20x20.
