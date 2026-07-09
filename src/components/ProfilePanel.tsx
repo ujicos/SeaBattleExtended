@@ -250,7 +250,7 @@ export function ProfilePanel({
                   }
                 }}
               >
-                Close {lobby.roomCode}
+                Close {lobby.roomCode}{lobby.status === "full" ? " (full)" : ""}
               </button>
             ))}
           </div>

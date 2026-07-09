@@ -12,6 +12,7 @@ const adminTokenLocalKey = "sea-battle.admin-token.remembered";
 export interface LobbySummary {
   roomCode: string;
   updatedAt: number;
+  status?: "open" | "full";
 }
 
 export interface PresenceStatus {

@@ -21,6 +21,7 @@ interface ClientInfo {
 interface LobbyRecord {
   roomCode: string;
   updatedAt: number;
+  status?: "open" | "full";
 }
 
 interface PresenceRecord {
@@ -226,7 +227,7 @@ export default {
       const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
 
       if (url.pathname === "/admin/status") {
-        const status = await registry.fetch("https://registry/status");
+        const status = await registry.fetch("https://registry/status?admin=1");
         const registryStatus = await status.json() as Record<string, unknown>;
         return json({ ok: true, ...registryStatus, leaderboard: await leaderboardStatus(env) });
       }
@@ -275,12 +276,13 @@ export default {
       const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
       await registry.fetch("https://registry/lobbies", {
         method: "POST",
-        body: JSON.stringify({ roomCode })
+        body: JSON.stringify({ roomCode, status: "open" })
       });
     } else {
       const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
-      await registry.fetch(`https://registry/lobbies?room=${encodeURIComponent(roomCode)}`, {
-        method: "DELETE"
+      await registry.fetch("https://registry/lobbies", {
+        method: "POST",
+        body: JSON.stringify({ roomCode, status: "full" })
       });
     }
 
@@ -343,17 +345,19 @@ export class LobbyRegistry {
       const presence = await this.prunedPresence();
       const next = [{ sessionId, updatedAt: Date.now() }, ...presence.filter((record) => record.sessionId !== sessionId)];
       const lobbies = await this.prunedLobbies();
+      const openLobbies = this.visibleLobbies(lobbies, false);
       await this.state.storage.put("presence", next.slice(0, 500));
       await this.state.storage.put("lobbies", lobbies);
-      return json({ ok: true, onlinePlayers: next.length, activeGames: lobbies.length, lobbies });
+      return json({ ok: true, onlinePlayers: next.length, activeGames: lobbies.length, lobbies: openLobbies });
     }
 
     if (url.pathname === "/status") {
       const lobbies = await this.prunedLobbies();
       const presence = await this.prunedPresence();
+      const includeFull = url.searchParams.get("admin") === "1";
       await this.state.storage.put("lobbies", lobbies);
       await this.state.storage.put("presence", presence);
-      return json({ ok: true, onlinePlayers: presence.length, activeGames: lobbies.length, lobbies });
+      return json({ ok: true, onlinePlayers: presence.length, activeGames: lobbies.length, lobbies: this.visibleLobbies(lobbies, includeFull) });
     }
 
     if (url.pathname === "/admin/clear-lobbies" && request.method === "POST") {
@@ -362,13 +366,16 @@ export class LobbyRegistry {
     }
 
     if (request.method === "POST") {
-      const body = (await request.json()) as { roomCode?: string };
+      const body = (await request.json()) as { roomCode?: string; status?: "open" | "full" };
       const roomCode = body.roomCode?.trim().toUpperCase();
       if (!roomCode) {
         return json({ ok: false, error: "Missing roomCode" }, { status: 400 });
       }
       const lobbies = await this.prunedLobbies();
-      const next = [{ roomCode, updatedAt: Date.now() }, ...lobbies.filter((lobby) => lobby.roomCode !== roomCode)].slice(0, 30);
+      const next = [
+        { roomCode, updatedAt: Date.now(), status: body.status === "full" ? "full" : "open" },
+        ...lobbies.filter((lobby) => lobby.roomCode !== roomCode)
+      ].slice(0, 60);
       await this.state.storage.put("lobbies", next);
       return json({ ok: true });
     }
@@ -383,13 +390,19 @@ export class LobbyRegistry {
 
     const lobbies = await this.prunedLobbies();
     await this.state.storage.put("lobbies", lobbies);
-    return json({ ok: true, lobbies });
+    return json({ ok: true, lobbies: this.visibleLobbies(lobbies, false) });
   }
 
   private async prunedLobbies(): Promise<LobbyRecord[]> {
     const now = Date.now();
     const lobbies = (await this.state.storage.get<LobbyRecord[]>("lobbies")) ?? [];
-    return lobbies.filter((lobby) => now - lobby.updatedAt < this.ttlMs);
+    return lobbies
+      .filter((lobby) => now - lobby.updatedAt < this.ttlMs)
+      .map((lobby) => ({ ...lobby, status: lobby.status ?? "open" }));
+  }
+
+  private visibleLobbies(lobbies: LobbyRecord[], includeFull: boolean): LobbyRecord[] {
+    return includeFull ? lobbies : lobbies.filter((lobby) => (lobby.status ?? "open") === "open");
   }
 
   private async prunedPresence(): Promise<PresenceRecord[]> {

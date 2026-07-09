@@ -270,6 +270,7 @@ function App() {
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
   const [adminToken, setAdminToken] = useState(() => loadAdminToken().token);
   const [adminVerified, setAdminVerified] = useState(false);
+  const [adminCloseCode, setAdminCloseCode] = useState("");
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -524,7 +525,10 @@ function App() {
     let active = true;
 
     async function updatePresence() {
-      const status = await pingPresence(sessionId);
+      const publicStatus = await pingPresence(sessionId);
+      const status = adminVerified && adminToken.trim()
+        ? await fetchAdminStatus(adminToken.trim()).catch(() => publicStatus)
+        : publicStatus;
       if (!active) {
         return;
       }
@@ -550,7 +554,7 @@ function App() {
       window.removeEventListener("pagehide", handleUnload);
       leavePresence(sessionId);
     };
-  }, []);
+  }, [adminToken, adminVerified]);
 
   useEffect(() => {
     return () => {
@@ -1190,7 +1194,7 @@ function App() {
   }
 
   async function refreshOpenLobbies(): Promise<void> {
-    const status = await fetchPresenceStatus();
+    const status = adminVerified && adminToken.trim() ? await fetchAdminStatus(adminToken.trim()) : await fetchPresenceStatus();
     setPresenceStatus(status);
     setOpenLobbies(status.lobbies);
   }
@@ -1219,6 +1223,7 @@ function App() {
     }
     await adminCloseLobby(adminToken.trim(), normalized);
     showEventToast(`Room ${normalized} closed`);
+    setAdminCloseCode((current) => (current.trim().toUpperCase() === normalized ? "" : current));
     await refreshOpenLobbies();
     if (isCurrentLobby) {
       leaveOrForfeit();
@@ -1883,9 +1888,14 @@ function App() {
               {openLobbies.length ? (
                 openLobbies.map((lobby) => (
                   <div className="lobby-row" key={lobby.roomCode}>
-                    <button className="lobby-join-button" type="button" onClick={() => void joinRoom(lobby.roomCode)}>
+                    <button
+                      className="lobby-join-button"
+                      type="button"
+                      disabled={lobby.status === "full"}
+                      onClick={() => void joinRoom(lobby.roomCode)}
+                    >
                       <strong>{lobby.roomCode}</strong>
-                      <small>{Math.max(0, Math.round((Date.now() - lobby.updatedAt) / 60000))}m ago</small>
+                      <small>{lobby.status === "full" ? "Full" : "Open"} · {Math.max(0, Math.round((Date.now() - lobby.updatedAt) / 60000))}m ago</small>
                     </button>
                     {adminVerified && (
                       <button
@@ -1902,6 +1912,30 @@ function App() {
                 <small>No open lobbies found.</small>
               )}
             </div>
+            {adminVerified && (
+              <div className="admin-lobby-close-card">
+                <div>
+                  <strong>Admin close room</strong>
+                  <small>Works for full rooms too if you know the code.</small>
+                </div>
+                <div className="admin-inline-action">
+                  <input
+                    value={adminCloseCode}
+                    placeholder="ABC123"
+                    maxLength={8}
+                    onChange={(event) => setAdminCloseCode(event.target.value.toUpperCase())}
+                  />
+                  <button
+                    className="secondary compact-action danger-action"
+                    type="button"
+                    disabled={!adminCloseCode.trim()}
+                    onClick={() => void closeLobbyAsAdmin(adminCloseCode)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
           {roomCode && (
             <section className="panel lobby-opponent-panel">
