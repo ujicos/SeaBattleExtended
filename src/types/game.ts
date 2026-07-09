@@ -102,6 +102,7 @@ export interface NetworkMessage {
     | "start"
     | "forfeit"
     | "storm-board"
+    | "admin-nuke"
     | "timer"
     | "resync"
     | "game-over";

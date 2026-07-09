@@ -1441,6 +1441,10 @@ select {
   gap: 3px;
 }
 
+.achievement-reveal-toggle {
+  margin-bottom: 12px;
+}
+
 .reset-stats-button {
   width: min(220px, 100%);
   margin-bottom: 12px;

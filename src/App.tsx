@@ -188,6 +188,22 @@ function driftBoardWithStorm(board: BoardState): { board: BoardState; moved: boo
   return { board: placeShip(board, pick.ship, pick.origin, pick.ship.orientation), moved: true };
 }
 
+function nukeBoard(board: BoardState): BoardState {
+  return {
+    ...board,
+    ships: board.ships.map((ship) => ({
+      ...ship,
+      hits: getShipCells(ship)
+    })),
+    shots: board.ships.reduce<Record<string, ShotResult>>((shots, ship) => {
+      for (const cell of getShipCells(ship)) {
+        shots[coordKey(cell)] = "sunk";
+      }
+      return shots;
+    }, { ...board.shots })
+  };
+}
+
 type MatchMode = "practice" | "p2p";
 type PeerRole = "host" | "guest" | null;
 type BattleBoardView = "target" | "fleet";
@@ -271,6 +287,7 @@ function App() {
   const [adminToken, setAdminToken] = useState(() => loadAdminToken().token);
   const [adminVerified, setAdminVerified] = useState(false);
   const [adminCloseCode, setAdminCloseCode] = useState("");
+  const [revealHiddenAchievements, setRevealHiddenAchievements] = useState(false);
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -289,6 +306,7 @@ function App() {
   const lastStormMove = useRef(-1);
   const lastStormWarnAt = useRef(0);
   const matchRecordedRef = useRef(false);
+  const suppressMatchStatsRef = useRef(false);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
   const selectedShip = config.fleet.find((ship) => ship.id === game.selectedShipId);
@@ -599,6 +617,9 @@ function App() {
   useEffect(() => {
     const rank = getRankProgress(stats.xp);
     const timeout = window.setTimeout(() => {
+      if (suppressMatchStatsRef.current) {
+        return;
+      }
       void submitGlobalLeaderboard({
         playerId: profile.playerId,
         displayName: profile.displayName,
@@ -835,6 +856,7 @@ function App() {
   function beginLocalBattle() {
     const remoteBoard = createBoardForSettings(game.settings);
     matchRecordedRef.current = false;
+    suppressMatchStatsRef.current = false;
     setLocalShield(0);
     setRemoteShield(0);
     setXpBreakdown(null);
@@ -1104,8 +1126,13 @@ function App() {
       return;
     }
     matchRecordedRef.current = true;
-    setXpBreakdown(makeXpBreakdown(result, state));
+    const suppressStats = suppressMatchStatsRef.current;
+    setXpBreakdown(suppressStats ? { result, rows: [{ label: "Admin debug match", amount: 0 }], total: 0 } : makeXpBreakdown(result, state));
     audio.play(result === "win" ? "victory" : "defeat");
+    if (suppressStats) {
+      showEventToast("Admin debug match: stats declined.");
+      return;
+    }
     if (result === "win") {
       unlockLocalAchievement("first_win");
       if (state.settings.blitz.enabled) {
@@ -1315,6 +1342,7 @@ function App() {
 
       if (message.type === "start") {
         matchRecordedRef.current = false;
+        suppressMatchStatsRef.current = false;
         setXpBreakdown(null);
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
         setNetworkStatus("Battle live. Host fires first.");
@@ -1335,6 +1363,25 @@ function App() {
           endMatch("win", nextState);
         }
         setNetworkStatus("Peer left. Match closed.");
+        return;
+      }
+
+      if (message.type === "admin-nuke") {
+        const current = gameRef.current;
+        if (current.phase === "battle") {
+          suppressMatchStatsRef.current = true;
+          const nextState: GameState = {
+            ...current,
+            localBoard: nukeBoard(current.localBoard),
+            phase: "defeat",
+            winner: "remote",
+            endedAt: performance.now(),
+            log: ["admin NUKE received", ...current.log].slice(0, 30)
+          };
+          setGame(nextState);
+          showEventToast("Admin nuke received. Stats declined.");
+          endMatch("loss", nextState);
+        }
         return;
       }
 
@@ -1375,11 +1422,34 @@ function App() {
       return;
     }
     matchRecordedRef.current = false;
+    suppressMatchStatsRef.current = false;
     setXpBreakdown(null);
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
     setNetworkStatus("Battle live. Your turn.");
     setActiveTab("play");
+  }
+
+  function adminNukeRemoteFleet() {
+    if (!adminVerified || matchMode !== "p2p" || game.phase !== "battle") {
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to nuke ${opponent.displayName}'s fleet? This debug match will not count for stats.`)) {
+      return;
+    }
+    suppressMatchStatsRef.current = true;
+    const nextState: GameState = {
+      ...game,
+      remoteBoard: nukeBoard(game.remoteBoard),
+      phase: "victory",
+      winner: "local",
+      endedAt: performance.now(),
+      log: ["admin NUKE launched", ...game.log].slice(0, 30)
+    };
+    network.current?.send("admin-nuke", { noStats: true });
+    setGame(nextState);
+    showEventToast("Admin nuke launched. Stats declined.");
+    endMatch("win", nextState);
   }
 
   function receiveRemoteShot(coord: Coordinate) {
@@ -1737,6 +1807,11 @@ function App() {
                     Forfeit
                   </button>
                 )}
+                {adminVerified && matchMode === "p2p" && game.phase === "battle" && (
+                  <button className="icon-button stats-match-button danger-action" type="button" onClick={adminNukeRemoteFleet} title="Admin nuke fleet">
+                    Nuke
+                  </button>
+                )}
                 <div className="audio-toggle" aria-label="Audio settings">
                   {([
                     ["on", Volume2, "All"],
@@ -1986,7 +2061,14 @@ function App() {
           }
         />
       )}
-      {activeTab === "achievements" && <AchievementsPanel stats={stats} />}
+      {activeTab === "achievements" && (
+        <AchievementsPanel
+          stats={stats}
+          canRevealHidden={adminVerified}
+          revealHidden={revealHiddenAchievements}
+          onRevealHiddenChange={setRevealHiddenAchievements}
+        />
+      )}
       {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}
       {eventToast && <div className="event-toast" role="status">{eventToast}</div>}
       {achievementToast && (
