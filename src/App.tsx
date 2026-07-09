@@ -186,6 +186,7 @@ const OPPONENT_SOUND_VOLUME = 0.28;
 const audioModeKey = "sea-battle.audio-mode";
 const presenceSessionKey = "sea-battle.presence-session";
 const waitingFrames = ["Waiting", "Waiting.", "Waiting..", "Waiting...", "Waiting..", "Waiting."];
+const STORM_MOVE_INTERVAL = 10;
 
 interface ReadyPayload {
   board: BoardState;
@@ -210,6 +211,12 @@ interface ShotResultPayload {
 
 interface StormBoardPayload {
   board: BoardState;
+}
+
+interface XpBreakdown {
+  result: "win" | "loss";
+  rows: Array<{ label: string; amount: number }>;
+  total: number;
 }
 
 function App() {
@@ -239,10 +246,12 @@ function App() {
   const [copyNotice, setCopyNotice] = useState("");
   const [eventToast, setEventToast] = useState("");
   const [achievementToast, setAchievementToast] = useState<AchievementDefinition | null>(null);
+  const [xpBreakdown, setXpBreakdown] = useState<XpBreakdown | null>(null);
   const [stormPhase, setStormPhase] = useState<StormPhase>("clear");
   const [localShield, setLocalShield] = useState(0);
   const [remoteShield, setRemoteShield] = useState(0);
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
+  const [setupPanelExpanded, setSetupPanelExpanded] = useState(true);
   const [openLobbies, setOpenLobbies] = useState<LobbySummary[]>([]);
   const [presenceStatus, setPresenceStatus] = useState<PresenceStatus>({ onlinePlayers: 1, activeGames: 0, lobbies: [] });
   const [audioMode, setAudioMode] = useState<AudioMode>(() => (localStorage.getItem(audioModeKey) as AudioMode | null) ?? "on");
@@ -262,6 +271,7 @@ function App() {
   const stormTimer = useRef<number | null>(null);
   const stormClearTimer = useRef<number | null>(null);
   const lastStormMove = useRef(-1);
+  const lastStormWarnAt = useRef(0);
   const matchRecordedRef = useRef(false);
 
   const config = useMemo(() => getBoardConfig(game.settings.boardId), [game.settings.boardId]);
@@ -428,6 +438,24 @@ function App() {
     });
   }
 
+  function makeXpBreakdown(result: "win" | "loss", state: GameState): XpBreakdown {
+    const shotValues = Object.values(state.remoteBoard.shots);
+    const shots = shotValues.filter((value) => value !== "duplicate" && value !== "invalid").length;
+    const hits = shotValues.filter((value) => value === "hit" || value === "sunk").length;
+    const sunk = state.remoteBoard.ships.filter(isShipSunk).length;
+    const rows = [
+      { label: result === "win" ? "Victory bonus" : "Match played", amount: result === "win" ? xpAwards.win : xpAwards.loss },
+      { label: "Shots fired", amount: shots * xpAwards.shot },
+      { label: "Successful hits", amount: hits * xpAwards.hit },
+      { label: "Ships sunk", amount: sunk * xpAwards.sunk }
+    ].filter((row) => row.amount > 0);
+    return {
+      result,
+      rows,
+      total: rows.reduce((sum, row) => sum + row.amount, 0)
+    };
+  }
+
   function showBattleBoard(view: BattleBoardView, holdMs = 0, delayMs = 0) {
     if (boardSwitchTimer.current !== null) {
       window.clearTimeout(boardSwitchTimer.current);
@@ -556,6 +584,23 @@ function App() {
   }, [audioMode]);
 
   useEffect(() => {
+    const resumeAudio = () => {
+      if (document.visibilityState === "visible") {
+        void audio.resume();
+        if (gameRef.current.phase === "battle" && audioMode === "on") {
+          void audio.playTheme();
+        }
+      }
+    };
+    window.addEventListener("focus", resumeAudio);
+    document.addEventListener("visibilitychange", resumeAudio);
+    return () => {
+      window.removeEventListener("focus", resumeAudio);
+      document.removeEventListener("visibilitychange", resumeAudio);
+    };
+  }, [audioMode]);
+
+  useEffect(() => {
     if (game.phase === "battle" && audioMode === "on") {
       void audio.playTheme();
       return;
@@ -589,12 +634,16 @@ function App() {
   }, [game.turn, game.phase, game.settings.blitz.seconds]);
 
   useEffect(() => {
-    if (game.phase !== "battle" || !game.settings.modifiers.stormMode || game.moves === 0 || game.moves % 6 !== 0 || lastStormMove.current === game.moves) {
+    if (game.phase !== "battle" || !game.settings.modifiers.stormMode || game.moves === 0 || game.moves % STORM_MOVE_INTERVAL !== 0 || lastStormMove.current === game.moves) {
       return;
     }
     lastStormMove.current = game.moves;
     setStormPhase("warning");
-    audio.play("storm-warn", 0.8);
+    const now = performance.now();
+    if (now - lastStormWarnAt.current > 15000) {
+      lastStormWarnAt.current = now;
+      audio.play("storm-warn", 0.8);
+    }
     if (stormTimer.current !== null) {
       window.clearTimeout(stormTimer.current);
     }
@@ -659,6 +708,9 @@ function App() {
   }, [clock, game.phase, game.settings.blitz.enabled, game.settings.blitz.timeoutAction, game.turn]);
 
   function updateSettings(settings: GameSettings) {
+    if (matchMode === "p2p" && peerRole === "guest") {
+      return;
+    }
     const nextSettings = normalizeSettings(settings);
     setLocalReady(false);
     setRemoteReady(false);
@@ -725,6 +777,7 @@ function App() {
     matchRecordedRef.current = false;
     setLocalShield(0);
     setRemoteShield(0);
+    setXpBreakdown(null);
     setMatchMode("practice");
     setOpponent(guestIdentity);
     setGame((current) => startBattle(current, remoteBoard));
@@ -780,14 +833,7 @@ function App() {
       return { coord };
     }
 
-    const roll = Math.random();
-    if (roll < 0.14) {
-      return {
-        coord: options[Math.floor(Math.random() * options.length)],
-        message: "Rum fog wobbled your aim."
-      };
-    }
-    if (roll < 0.34) {
+    if (Math.random() < 0.12) {
       return {
         coord: options[Math.floor(Math.random() * options.length)],
         message: "Cursed cannonball curved!"
@@ -831,8 +877,10 @@ function App() {
       const nextLocalShield = treasure === "shield" ? localShield + 1 : localShield;
       if (treasure === "shield") {
         setLocalShield(nextLocalShield);
+        unlockLocalAchievement("treasure_found");
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Treasure found: one-hit shield armed.`);
       } else {
+        unlockLocalAchievement("fake_treasure");
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Fake treasure! You got faked out.`);
       }
       const state: GameState = {
@@ -886,6 +934,7 @@ function App() {
       return;
     }
     if (chaos.message && !sameCoord(coord, finalCoord)) {
+      unlockLocalAchievement("cursed_curve");
       showEventToast(chaos.message);
     }
     setSelectedTarget(null);
@@ -995,9 +1044,19 @@ function App() {
       return;
     }
     matchRecordedRef.current = true;
+    setXpBreakdown(makeXpBreakdown(result, state));
     audio.play(result === "win" ? "victory" : "defeat");
     if (result === "win") {
       unlockLocalAchievement("first_win");
+      if (state.settings.blitz.enabled) {
+        unlockLocalAchievement("blitz_win");
+      }
+      if (state.localBoard.ships.every((ship) => ship.hits.length === 0)) {
+        unlockLocalAchievement("flawless_fleet");
+      }
+    }
+    if (state.moves >= 40) {
+      unlockLocalAchievement("long_battle");
     }
     const durationMs = Math.round((state.endedAt ?? performance.now()) - (state.startedAt ?? performance.now()));
     setStats((current) =>
@@ -1156,8 +1215,16 @@ function App() {
         return;
       }
 
+      if (message.type === "unready") {
+        setRemoteReady(false);
+        setRemoteBoardReady(null);
+        setNetworkStatus(peerRoleRef.current === "host" ? "Opponent is adjusting their fleet." : "Host is adjusting settings.");
+        return;
+      }
+
       if (message.type === "start") {
         matchRecordedRef.current = false;
+        setXpBreakdown(null);
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
         setNetworkStatus("Battle live. Host fires first.");
         setActiveTab("play");
@@ -1203,11 +1270,21 @@ function App() {
     network.current?.send("ready", { board: game.localBoard } satisfies ReadyPayload);
   }
 
+  function unreadyFleet() {
+    if (matchMode !== "p2p" || !localReady) {
+      return;
+    }
+    setLocalReady(false);
+    setNetworkStatus("Fleet unlocked. Adjust your setup, then Ready again.");
+    network.current?.send("unready", {});
+  }
+
   function startP2PBattle() {
     if (peerRole !== "host" || !localReady || !remoteReady || !remoteBoardReady) {
       return;
     }
     matchRecordedRef.current = false;
+    setXpBreakdown(null);
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
     setNetworkStatus("Battle live. Your turn.");
@@ -1324,6 +1401,7 @@ function App() {
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
+    setXpBreakdown(null);
     setGame((current) => resetBoards(current, current.settings));
     if (matchMode === "p2p" && peerRole === "host") {
       network.current?.send("settings", gameRef.current.settings);
@@ -1403,7 +1481,7 @@ function App() {
         <div className="top-actions">
           <div className="presence-chip" aria-label="Live site activity">
             <span>{presenceStatus.onlinePlayers} online</span>
-            <small>{presenceStatus.activeGames} active games</small>
+            <small>{presenceStatus.activeGames} games</small>
           </div>
           <button
             className="player-chip"
@@ -1450,6 +1528,9 @@ function App() {
               onShuffle={shuffle}
               onStart={beginLocalBattle}
               ready={matchMode === "practice" && placementReady}
+              readOnly={matchMode === "p2p" && peerRole === "guest"}
+              expanded={setupPanelExpanded}
+              onToggleExpanded={() => setSetupPanelExpanded((value) => !value)}
             />
           )}
           {game.phase === "menu" && (
@@ -1518,6 +1599,11 @@ function App() {
                   <button className="primary" type="button" disabled={!placementReady || localReady} onClick={markReady}>
                     Ready
                   </button>
+                  {localReady && (
+                    <button className="secondary" type="button" onClick={unreadyFleet}>
+                      Un-ready
+                    </button>
+                  )}
                   {peerRole === "host" && (
                     <button className="secondary" type="button" disabled={!localReady || !remoteReady} onClick={startP2PBattle}>
                       Start P2P Battle
@@ -1626,7 +1712,6 @@ function App() {
                       onCellPress={selectTarget}
                       attackAnimation={attackVisual?.board === "remote" ? attackVisual : null}
                       fogActive={game.phase === "battle" && game.settings.modifiers.fogTide}
-                      chaosActive={game.phase === "battle" && game.settings.modifiers.pirateChaos}
                       stormPhase={stormPhase}
                       label="Target board"
                     />
@@ -1636,7 +1721,6 @@ function App() {
                       board={game.localBoard}
                       revealShips
                       attackAnimation={attackVisual?.board === "local" ? attackVisual : null}
-                      chaosActive={game.phase === "battle" && game.settings.modifiers.pirateChaos}
                       stormPhase={stormPhase}
                       label="Your board"
                     />
@@ -1650,6 +1734,16 @@ function App() {
                 {(game.phase === "victory" || game.phase === "defeat") && (
                   <section className={game.phase === "victory" ? "result victory" : "result defeat"}>
                     <h2>{game.phase === "victory" ? "Victory" : "Defeat"}</h2>
+                    {xpBreakdown && (
+                      <div className="xp-breakdown" aria-label="XP gained">
+                        <strong>+{xpBreakdown.total} XP</strong>
+                        {xpBreakdown.rows.map((row, index) => (
+                          <span style={{ "--xp-row": index } as React.CSSProperties} key={row.label}>
+                            {row.label} <b>+{row.amount}</b>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {matchMode !== "p2p" || peerRole === "host" ? (
                       <button className="primary" type="button" onClick={rematch}>Rematch</button>
                     ) : (
@@ -1712,16 +1806,18 @@ function App() {
               )}
             </div>
           </section>
-          <section className="panel lobby-opponent-panel">
-            <div className="section-title">
-              <span>Opponent</span>
-              <small>{lobbyOpponent.playerId}</small>
-            </div>
-            <div className="opponent-card">
-              <strong>{lobbyOpponent.playerId === waitingIdentity.playerId ? `${waitingLabel} for opponent` : lobbyOpponent.displayName}</strong>
-              <span>{lobbyOpponent.playerId === waitingIdentity.playerId ? networkStatus : `${lobbyOpponent.statsSummary.games} games · ${lobbyOpponent.statsSummary.winRate}% win rate`}</span>
-            </div>
-          </section>
+          {roomCode && (
+            <section className="panel lobby-opponent-panel">
+              <div className="section-title">
+                <span>Opponent</span>
+                <small>{lobbyOpponent.playerId}</small>
+              </div>
+              <div className="opponent-card">
+                <strong>{lobbyOpponent.playerId === waitingIdentity.playerId ? `${waitingLabel} for opponent` : lobbyOpponent.displayName}</strong>
+                <span>{lobbyOpponent.playerId === waitingIdentity.playerId ? networkStatus : `${lobbyOpponent.statsSummary.games} games · ${lobbyOpponent.statsSummary.winRate}% win rate`}</span>
+              </div>
+            </section>
+          )}
         </div>
       )}
 

@@ -5,8 +5,8 @@ import type { BoardState, Coordinate, GameSettings, GameState, PlayerSide, ShotO
 export function createBoardForSettings(settings: GameSettings): BoardState {
   const config = getBoardConfig(settings.boardId);
   const board = randomizeFleet(config);
-  const shieldCount = settings.modifiers.treasureTiles ? Math.max(1, Math.floor(config.size / 8)) : 0;
-  const fakeCount = settings.modifiers.pirateChaos ? Math.max(2, Math.floor(config.size / 6)) : 0;
+  const shieldCount = settings.modifiers.treasureTiles ? Math.max(1, Math.floor(config.size / 12)) : 0;
+  const fakeCount = settings.modifiers.pirateChaos ? Math.max(1, Math.floor(config.size / 12)) : 0;
   return shieldCount || fakeCount ? seedTreasures(board, shieldCount, fakeCount) : board;
 }
 

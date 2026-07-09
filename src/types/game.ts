@@ -96,6 +96,7 @@ export interface NetworkMessage {
     | "identity"
     | "settings"
     | "ready"
+    | "unready"
     | "shot"
     | "shot-result"
     | "start"

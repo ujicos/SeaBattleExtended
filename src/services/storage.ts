@@ -90,8 +90,14 @@ export const achievements: AchievementDefinition[] = [
   { id: "first_hit", title: "First Blood", description: "Land your first hit." },
   { id: "first_sink", title: "Shipbreaker", description: "Sink your first ship." },
   { id: "first_win", title: "Captain's Mark", description: "Win your first match." },
+  { id: "blitz_win", title: "Clock Captain", description: "Win with Blitz Mode enabled." },
+  { id: "flawless_fleet", title: "Untouched Fleet", description: "Win before losing any ships.", hidden: true },
   { id: "fog_hit", title: "Through the Fog", description: "Hit a ship during Fog Tide.", hidden: true },
   { id: "storm_chaser", title: "Storm Chaser", description: "Have a ship moved by Storm Mode.", hidden: true },
+  { id: "treasure_found", title: "Buried Booty", description: "Find real treasure.", hidden: true },
+  { id: "fake_treasure", title: "Fool's Gold", description: "Find fake treasure.", hidden: true },
+  { id: "cursed_curve", title: "Crooked Cannon", description: "Have a cursed cannonball curve.", hidden: true },
+  { id: "long_battle", title: "Sea Marathon", description: "Finish a match with at least 40 moves." },
   { id: "prestige_1", title: "Prestige Captain", description: "Prestige for the first time.", hidden: true }
 ];
 

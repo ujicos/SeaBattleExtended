@@ -41,6 +41,14 @@ export function StatsPanel({
     ["Fastest win", duration(stats.fastestWinMs)],
     ["Longest game", duration(stats.longestGameMs)]
   ];
+  const opponentLeaderboard = Object.entries(stats.opponents)
+    .map(([playerId, opponent]) => ({
+      playerId,
+      ...opponent,
+      winRate: opponent.games ? Math.round((opponent.wins / opponent.games) * 100) : 0
+    }))
+    .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.games - a.games)
+    .slice(0, 5);
 
   return (
     <section className="panel">
@@ -73,6 +81,24 @@ export function StatsPanel({
           <div className="stat" key={label}>
             <small>{label}</small>
             <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="leaderboard-panel">
+        <div className="section-title">
+          <span>Rank leaderboard</span>
+          <small>local</small>
+        </div>
+        <div className="leaderboard-row self">
+          <span>#1 You</span>
+          <strong>Rank {rank.rank}</strong>
+          <small>{stats.lifetimeXp} XP</small>
+        </div>
+        {opponentLeaderboard.map((opponent, index) => (
+          <div className="leaderboard-row" key={opponent.playerId}>
+            <span>#{index + 2} {opponent.displayName}</span>
+            <strong>{opponent.wins} wins</strong>
+            <small>{opponent.winRate}% WR</small>
           </div>
         ))}
       </div>

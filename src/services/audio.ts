@@ -29,6 +29,13 @@ export class AudioManager {
     }
   }
 
+  async resume(): Promise<void> {
+    const context = await this.getContext();
+    if (context?.state === "suspended") {
+      await context.resume().catch(() => undefined);
+    }
+  }
+
   play(key: string, volume = 1): void {
     if (!this.effectsEnabled) {
       return;
