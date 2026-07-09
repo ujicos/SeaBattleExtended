@@ -1,4 +1,4 @@
-import { Anchor, BarChart3, ChevronDown, Crown, Music2, Radio, Settings, Shield, Trophy, UserRound, Volume2, VolumeX } from "lucide-react";
+import { Anchor, BarChart3, ChevronDown, Crown, Music2, Radio, RotateCw, Settings, Shield, Shuffle, Trophy, UserRound, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AchievementsPanel } from "./components/AchievementsPanel";
 import { BoardGrid, isSunkBufferCoord } from "./components/BoardGrid";
@@ -215,7 +215,7 @@ const OPPONENT_SOUND_VOLUME = 0.28;
 const audioModeKey = "sea-battle.audio-mode";
 const presenceSessionKey = "sea-battle.presence-session";
 const waitingFrames = ["Waiting", "Waiting.", "Waiting..", "Waiting...", "Waiting..", "Waiting."];
-const STORM_MOVE_INTERVAL = 10;
+const STORM_MOVE_INTERVAL = 18;
 
 interface ReadyPayload {
   board: BoardState;
@@ -248,6 +248,13 @@ interface XpBreakdown {
   total: number;
 }
 
+interface SocialMessage {
+  id: string;
+  from: "local" | "remote";
+  text: string;
+  kind: "chat" | "reaction";
+}
+
 function App() {
   const [profile, setProfile] = useState<PlayerProfile>(() => loadProfile());
   const [stats, setStats] = useState<PlayerStats>(() => loadStats());
@@ -263,6 +270,8 @@ function App() {
   const [clock, setClock] = useState<number>(defaultSettings.blitz.seconds);
   const clockRef = useRef(clock);
   const [showOpponentStats, setShowOpponentStats] = useState(false);
+  const [socialMessages, setSocialMessages] = useState<SocialMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
   const [attackVisual, setAttackVisual] = useState<(AttackAnimation & { board: "local" | "remote" }) | null>(null);
   const [matchMode, setMatchMode] = useState<MatchMode>("practice");
   const [peerRole, setPeerRole] = useState<PeerRole>(null);
@@ -304,7 +313,7 @@ function App() {
   const stormTimer = useRef<number | null>(null);
   const stormClearTimer = useRef<number | null>(null);
   const lastStormMove = useRef(-1);
-  const lastStormWarnAt = useRef(0);
+  const pendingStormPreview = useRef(false);
   const matchRecordedRef = useRef(false);
   const suppressMatchStatsRef = useRef(false);
 
@@ -344,6 +353,13 @@ function App() {
   useEffect(() => {
     peerRoleRef.current = peerRole;
   }, [peerRole]);
+
+  useEffect(() => {
+    if (matchMode !== "p2p" || peerRole !== "host" || game.phase !== "battle") {
+      return;
+    }
+    network.current?.send("resync", { turn: game.turn, moves: game.moves });
+  }, [game.moves, game.phase, game.turn, matchMode, peerRole]);
 
   useEffect(() => {
     opponentRef.current = opponent;
@@ -460,6 +476,30 @@ function App() {
       eventToastTimer.current = null;
       setEventToast("");
     }, 2200);
+  }
+
+  function appendSocialMessage(message: SocialMessage): void {
+    setSocialMessages((current) => [...current, message].slice(-6));
+  }
+
+  function sendReaction(text: string): void {
+    if (matchMode !== "p2p" || !roomCode) {
+      return;
+    }
+    const message: SocialMessage = { id: crypto.randomUUID(), from: "local", text, kind: "reaction" };
+    appendSocialMessage(message);
+    network.current?.send("reaction", { text });
+  }
+
+  function sendChat(): void {
+    const text = chatInput.trim().slice(0, 120);
+    if (matchMode !== "p2p" || !roomCode || !text) {
+      return;
+    }
+    const message: SocialMessage = { id: crypto.randomUUID(), from: "local", text, kind: "chat" };
+    appendSocialMessage(message);
+    setChatInput("");
+    network.current?.send("chat", { text });
   }
 
   function unlockLocalAchievement(achievementId: string) {
@@ -674,9 +714,13 @@ function App() {
       }
     };
     window.addEventListener("focus", resumeAudio);
+    window.addEventListener("pageshow", resumeAudio);
+    window.addEventListener("pointerdown", resumeAudio);
     document.addEventListener("visibilitychange", resumeAudio);
     return () => {
       window.removeEventListener("focus", resumeAudio);
+      window.removeEventListener("pageshow", resumeAudio);
+      window.removeEventListener("pointerdown", resumeAudio);
       document.removeEventListener("visibilitychange", resumeAudio);
     };
   }, [audioMode]);
@@ -718,36 +762,35 @@ function App() {
     if (game.phase !== "battle" || !game.settings.modifiers.stormMode || game.moves === 0 || game.moves % STORM_MOVE_INTERVAL !== 0 || lastStormMove.current === game.moves) {
       return;
     }
+    if (stormTimer.current !== null) {
+      return;
+    }
     lastStormMove.current = game.moves;
     setStormPhase("warning");
-    const now = performance.now();
-    if (now - lastStormWarnAt.current > 15000) {
-      lastStormWarnAt.current = now;
-      audio.play("storm-warn", 0.8);
-    }
-    if (stormTimer.current !== null) {
-      window.clearTimeout(stormTimer.current);
-    }
+    audio.play("storm-warn", 0.8);
     stormTimer.current = window.setTimeout(() => {
       stormTimer.current = null;
       setStormPhase("wave");
       audio.play("storm-wave", 0.9);
-      setGame((current) => {
-        if (current.phase !== "battle") {
-          return current;
-        }
+      const current = gameRef.current;
+      if (current.phase === "battle") {
         const localStorm = driftBoardWithStorm(current.localBoard);
         const remoteStorm = matchMode === "practice" ? driftBoardWithStorm(current.remoteBoard) : { board: current.remoteBoard, moved: false };
         if (localStorm.moved) {
           unlockLocalAchievement("storm_chaser");
           network.current?.send("storm-board", { board: localStorm.board } satisfies StormBoardPayload);
+          if (current.turn === "local") {
+            showBattleBoard("fleet", 2200, 0);
+          } else {
+            pendingStormPreview.current = true;
+          }
         }
-        return {
+        setGame({
           ...current,
           localBoard: localStorm.board,
           remoteBoard: remoteStorm.board
-        };
-      });
+        });
+      }
       if (stormClearTimer.current !== null) {
         window.clearTimeout(stormClearTimer.current);
       }
@@ -796,6 +839,7 @@ function App() {
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
+    setSocialMessages([]);
     setLocalShield(0);
     setRemoteShield(0);
     setGame((current) => ({
@@ -915,10 +959,10 @@ function App() {
       return { coord };
     }
 
-    if (Math.random() < 0.12) {
+    if (Math.random() < 0.06) {
       return {
         coord: options[Math.floor(Math.random() * options.length)],
-        message: "Cursed cannonball curved!"
+        message: "Curveball!"
       };
     }
 
@@ -953,6 +997,9 @@ function App() {
     }
     const chaos = applyPirateChaos(coord, game.remoteBoard);
     const finalCoord = chaos.coord;
+    if (chaos.message && !sameCoord(coord, finalCoord)) {
+      unlockLocalAchievement("curveball");
+    }
     const treasure = findTreasureAt(game.remoteBoard, finalCoord);
     if (treasure) {
       const remoteBoard = markTreasureShot(game.remoteBoard, finalCoord);
@@ -960,6 +1007,7 @@ function App() {
       if (treasure === "shield") {
         setLocalShield(nextLocalShield);
         unlockLocalAchievement("treasure_found");
+        audio.play("turn", 0.65);
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Treasure found: one-hit shield armed.`);
       } else {
         unlockLocalAchievement("fake_treasure");
@@ -1088,6 +1136,7 @@ function App() {
     if (protectedShip) {
       setLocalShield((value) => Math.max(0, value - 1));
       showEventToast("Your shield blocked a hit.");
+      unlockLocalAchievement("shield_save");
       const state: GameState = {
         ...currentGame,
         localBoard: markShieldedShot(currentGame.localBoard, pick),
@@ -1141,6 +1190,15 @@ function App() {
       if (state.localBoard.ships.every((ship) => ship.hits.length === 0)) {
         unlockLocalAchievement("flawless_fleet");
       }
+      if (getBoardConfig(state.settings.boardId).size >= 16) {
+        unlockLocalAchievement("big_board_win");
+      }
+      if (!Object.values(state.remoteBoard.shots).some((shot) => shot === "miss")) {
+        unlockLocalAchievement("perfect_accuracy");
+      }
+      if (stats.wins + 1 >= 10) {
+        unlockLocalAchievement("ten_wins");
+      }
     }
     if (state.moves >= 40) {
       unlockLocalAchievement("long_battle");
@@ -1172,6 +1230,7 @@ function App() {
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
+    setSocialMessages([]);
     setRoomCode("");
     setJoinCode("");
     setNetworkStatus("P2P closed. Offline practice ready.");
@@ -1271,6 +1330,7 @@ function App() {
     setPeerRole("guest");
     setOpponent(waitingIdentity);
     setNetworkStatus(`Joining room ${codeToJoin}...`);
+    setSetupPanelExpanded(false);
     setLocalReady(false);
     setRemoteReady(false);
     setRemoteBoardReady(null);
@@ -1312,7 +1372,9 @@ function App() {
         setRemoteBoardReady(null);
         setLocalShield(0);
         setRemoteShield(0);
+        setSocialMessages([]);
         setActiveTab("play");
+        setSetupPanelExpanded(false);
         setNetworkStatus("Host settings received. Ready your fleet.");
         return;
       }
@@ -1344,6 +1406,7 @@ function App() {
         matchRecordedRef.current = false;
         suppressMatchStatsRef.current = false;
         setXpBreakdown(null);
+        setSocialMessages([]);
         setGame((current) => ({ ...startBattle(current, remoteBoardReadyRef.current ?? current.remoteBoard), turn: "remote" }));
         setNetworkStatus("Battle live. Host fires first.");
         setActiveTab("play");
@@ -1381,6 +1444,32 @@ function App() {
           setGame(nextState);
           showEventToast("Admin nuke received. Stats declined.");
           endMatch("loss", nextState);
+        }
+        return;
+      }
+
+      if (message.type === "chat" || message.type === "reaction") {
+        const payload = message.payload as { text?: string };
+        const text = String(payload.text ?? "").trim().slice(0, 120);
+        if (text) {
+          appendSocialMessage({
+            id: message.messageId,
+            from: "remote",
+            text,
+            kind: message.type
+          });
+        }
+        return;
+      }
+
+      if (message.type === "resync") {
+        const payload = message.payload as { turn?: PlayerSide; moves?: number };
+        if (peerRoleRef.current === "guest" && payload.turn && typeof payload.moves === "number") {
+          setGame((current) => (
+            current.phase === "battle" && current.moves === payload.moves
+              ? { ...current, turn: payload.turn === "local" ? "remote" : "local" }
+              : current
+          ));
         }
         return;
       }
@@ -1424,6 +1513,7 @@ function App() {
     matchRecordedRef.current = false;
     suppressMatchStatsRef.current = false;
     setXpBreakdown(null);
+    setSocialMessages([]);
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
     setNetworkStatus("Battle live. Your turn.");
@@ -1447,6 +1537,7 @@ function App() {
       log: ["admin NUKE launched", ...game.log].slice(0, 30)
     };
     network.current?.send("admin-nuke", { noStats: true });
+    unlockLocalAchievement("admin_nuke");
     setGame(nextState);
     showEventToast("Admin nuke launched. Stats declined.");
     endMatch("win", nextState);
@@ -1460,6 +1551,7 @@ function App() {
       const nextRemoteShield = treasure === "shield" ? remoteShieldRef.current + 1 : remoteShieldRef.current;
       if (treasure === "shield") {
         setRemoteShield(nextRemoteShield);
+        audio.play("turn", 0.35);
       }
       playAttackVisual("local", coord, "miss", OPPONENT_SOUND_VOLUME);
       playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
@@ -1490,6 +1582,7 @@ function App() {
       const nextLocalShield = Math.max(0, localShieldRef.current - 1);
       setLocalShield(nextLocalShield);
       showEventToast("Your shield blocked a hit.");
+      unlockLocalAchievement("shield_save");
       const board = markShieldedShot(current.localBoard, coord);
       playAttackVisual("local", coord, "shielded", OPPONENT_SOUND_VOLUME);
       playShotResultSound("shielded", OPPONENT_SOUND_VOLUME);
@@ -1554,6 +1647,11 @@ function App() {
     if (winner) {
       endMatch("loss", nextState);
     } else if (nextTurn === "local") {
+      if (pendingStormPreview.current) {
+        pendingStormPreview.current = false;
+        showBattleBoard("fleet", 2200, 0);
+        window.setTimeout(() => showBattleBoard("target", 0, BOARD_SWITCH_DELAY_MS), 2200);
+      }
       notifyLocalTurn();
     }
   }
@@ -1563,6 +1661,7 @@ function App() {
     setRemoteReady(false);
     setRemoteBoardReady(null);
     setXpBreakdown(null);
+    suppressMatchStatsRef.current = false;
     setGame((current) => resetBoards(current, current.settings));
     if (matchMode === "p2p" && peerRole === "host") {
       network.current?.send("settings", gameRef.current.settings);
@@ -1580,6 +1679,7 @@ function App() {
       showEventToast(payload.chaosMessage);
     }
     if (payload.treasureKind === "shield") {
+      audio.play("turn", 0.45);
       showEventToast("Treasure found: one-hit shield armed.");
     } else if (payload.treasureKind === "fake") {
       showEventToast("Fake treasure! You got faked out.");
@@ -1692,6 +1792,8 @@ function App() {
               readOnly={matchMode === "p2p" && peerRole === "guest"}
               expanded={setupPanelExpanded}
               onToggleExpanded={() => setSetupPanelExpanded((value) => !value)}
+              showPlacementControls={false}
+              showStart={matchMode === "practice"}
             />
           )}
           {game.phase === "menu" && (
@@ -1717,6 +1819,16 @@ function App() {
                 expanded={placementBoardExpanded}
                 onToggleExpand={() => setPlacementBoardExpanded((value) => !value)}
               />
+              {placementBoardExpanded && !localReady && (
+                <div className="board-action-row">
+                  <button className="icon-button" type="button" onClick={() => setOrientation((value) => (value === "horizontal" ? "vertical" : "horizontal"))} title="Rotate selected ship">
+                    <RotateCw size={18} /> Rotate
+                  </button>
+                  <button className="icon-button" type="button" onClick={shuffle} title="Shuffle ships">
+                    <Shuffle size={18} /> Shuffle
+                  </button>
+                </div>
+              )}
               {matchMode === "p2p" && (
                 <section className="panel p2p-ready-panel">
                   <div className="section-title">
@@ -1762,14 +1874,9 @@ function App() {
                       <strong>{remoteReady ? "Ready" : waitingLabel}</strong>
                     </div>
                   </div>
-                  <button className="primary" type="button" disabled={!placementReady || localReady} onClick={markReady}>
-                    Ready
+                  <button className={localReady ? "secondary" : "primary"} type="button" disabled={!localReady && !placementReady} onClick={localReady ? unreadyFleet : markReady}>
+                    {localReady ? "Un-ready" : "Ready"}
                   </button>
-                  {localReady && (
-                    <button className="secondary" type="button" onClick={unreadyFleet}>
-                      Un-ready
-                    </button>
-                  )}
                   {peerRole === "host" && (
                     <button className="secondary" type="button" disabled={!localReady || !remoteReady} onClick={startP2PBattle}>
                       Start P2P Battle
@@ -1902,6 +2009,40 @@ function App() {
                     Fire!
                   </button>
                 </section>
+                {matchMode === "p2p" && roomCode && (
+                  <section className="battle-social-panel">
+                    <div className="reaction-row" aria-label="Quick reactions">
+                      {["Nice", "Oof", "Boom", "Close"].map((reaction) => (
+                        <button className="secondary compact-action" type="button" key={reaction} onClick={() => sendReaction(reaction)}>
+                          {reaction}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="chat-log" aria-live="polite">
+                      {socialMessages.length ? (
+                        socialMessages.map((message) => (
+                          <span className={message.from === "local" ? "local" : "remote"} key={message.id}>
+                            <b>{message.from === "local" ? "You" : opponent.displayName}</b> {message.text}
+                          </span>
+                        ))
+                      ) : (
+                        <small>No chat yet.</small>
+                      )}
+                    </div>
+                    <form
+                      className="chat-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        sendChat();
+                      }}
+                    >
+                      <input value={chatInput} maxLength={120} placeholder="Send a message" onChange={(event) => setChatInput(event.target.value)} />
+                      <button className="secondary compact-action" type="submit" disabled={!chatInput.trim()}>
+                        Send
+                      </button>
+                    </form>
+                  </section>
+                )}
                 {(game.phase === "victory" || game.phase === "defeat") && (
                   <section className={game.phase === "victory" ? "result victory" : "result defeat"}>
                     <h2>{game.phase === "victory" ? "Victory" : "Defeat"}</h2>

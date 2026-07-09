@@ -9,6 +9,21 @@ export class AudioManager {
   private musicSource: AudioBufferSourceNode | null = null;
   private musicGain: GainNode | null = null;
 
+  constructor() {
+    this.configureDeviceAudio();
+  }
+
+  private configureDeviceAudio(): void {
+    try {
+      const audioSession = (navigator as Navigator & { audioSession?: { type?: string } }).audioSession;
+      if (audioSession) {
+        audioSession.type = "ambient";
+      }
+    } catch {
+      // Audio Session is best-effort and only exists in some browsers.
+    }
+  }
+
   setEnabled(enabled: boolean): void {
     this.effectsEnabled = enabled;
     this.setMusicEnabled(enabled);
@@ -30,9 +45,15 @@ export class AudioManager {
   }
 
   async resume(): Promise<void> {
+    this.configureDeviceAudio();
     const context = await this.getContext();
     if (context?.state === "suspended") {
       await context.resume().catch(() => undefined);
+    }
+    if (context?.state === "closed") {
+      this.context = null;
+      this.musicSource = null;
+      this.musicGain = null;
     }
   }
 
@@ -49,6 +70,12 @@ export class AudioManager {
 
   private async getContext(): Promise<AudioContext | null> {
     try {
+      this.configureDeviceAudio();
+      if (this.context?.state === "closed") {
+        this.context = null;
+        this.musicSource = null;
+        this.musicGain = null;
+      }
       this.context ??= new AudioContext();
       if (this.context.state === "suspended") {
         await this.context.resume();
@@ -153,6 +180,9 @@ export class AudioManager {
   private playTurnCue(volume: number): void {
     try {
       this.context ??= new AudioContext();
+      if (this.context.state === "suspended") {
+        void this.context.resume();
+      }
       const now = this.context.currentTime;
       const oscillator = this.context.createOscillator();
       const gain = this.context.createGain();

@@ -218,7 +218,7 @@ small,
 
 .tabbar {
   position: sticky;
-  top: 8px;
+  top: max(8px, calc(env(safe-area-inset-top) + 8px));
   z-index: 8;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -399,6 +399,13 @@ select {
   margin: 12px 0;
 }
 
+.board-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: -4px 0 14px;
+}
+
 .segmented button,
 .icon-button,
 .secondary,
@@ -421,6 +428,10 @@ select {
   width: 100%;
   border: 0;
   font-weight: 800;
+}
+
+.secondary:active {
+  background: rgba(3, 14, 20, 0.72);
 }
 
 .primary {
@@ -1115,6 +1126,54 @@ select {
   width: 100%;
 }
 
+.battle-social-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(14, 32, 42, 0.66);
+}
+
+.reaction-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.chat-log {
+  display: grid;
+  gap: 4px;
+  min-height: 28px;
+  max-height: 116px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid rgba(169, 216, 210, 0.14);
+  border-radius: 12px;
+  background: rgba(3, 14, 20, 0.28);
+  color: #c9dbd9;
+}
+
+.chat-log span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-log .local b {
+  color: var(--accent);
+}
+
+.chat-log .remote b {
+  color: var(--accent-2);
+}
+
+.chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
 .battle-board-stage {
   grid-column: 1 / -1;
   display: grid;
@@ -1661,8 +1720,19 @@ select {
   pointer-events: none;
 }
 
+.achievement-toast,
 .event-toast {
   border-color: rgba(242, 198, 109, 0.5);
+  top: 50%;
+  bottom: auto;
+  justify-content: center;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation-name: event-toast-pop;
+}
+
+.achievement-toast {
+  border-color: rgba(72, 208, 187, 0.5);
 }
 
 .achievement-toast small {
@@ -1710,9 +1780,12 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  min-width: 0;
 }
 
 .toggle-card {
+  width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1729,6 +1802,12 @@ select {
 .toggle-card span {
   display: grid;
   gap: 2px;
+  min-width: 0;
+}
+
+.toggle-card strong,
+.toggle-card small {
+  overflow-wrap: anywhere;
 }
 
 .compact-toggle {
@@ -1830,6 +1909,10 @@ select {
     gap: 10px;
   }
 
+  .tabbar {
+    top: max(72px, calc(env(safe-area-inset-top) + 18px));
+  }
+
   .brand {
     width: 100%;
     gap: 8px;
@@ -1886,6 +1969,15 @@ select {
 
   .presence-chip small {
     font-size: 0.64rem;
+  }
+
+  .admin-inline-action {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inline-action .compact-action,
+  .achievement-reveal-toggle {
+    width: 100%;
   }
 
   .content-grid,
@@ -2011,6 +2103,22 @@ select {
   100% {
     opacity: 0;
     transform: translate(-50%, 8px) scale(0.99);
+  }
+}
+
+@keyframes event-toast-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px)) scale(0.98);
+  }
+  12%,
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px)) scale(0.99);
   }
 }
 

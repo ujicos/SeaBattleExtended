@@ -97,6 +97,12 @@ export const achievements: AchievementDefinition[] = [
   { id: "treasure_found", title: "Buried Booty", description: "Find real treasure.", hidden: true },
   { id: "fake_treasure", title: "Fool's Gold", description: "Find fake treasure.", hidden: true },
   { id: "cursed_curve", title: "Crooked Cannon", description: "Have a cursed cannonball curve.", hidden: true },
+  { id: "shield_save", title: "Lucky Charm", description: "Block a hit with a treasure shield.", hidden: true },
+  { id: "curveball", title: "Curveball!", description: "Have a cursed shot curve to another tile.", hidden: true },
+  { id: "big_board_win", title: "Big Sea Captain", description: "Win on a 16x16 or larger board." },
+  { id: "perfect_accuracy", title: "No Splash Zone", description: "Win a match without missing.", hidden: true },
+  { id: "ten_wins", title: "Fleet Veteran", description: "Win 10 matches." },
+  { id: "admin_nuke", title: "Unfair Seas", description: "Use the admin nuke.", hidden: true },
   { id: "long_battle", title: "Sea Marathon", description: "Finish a match with at least 40 moves." },
   { id: "prestige_1", title: "Prestige Captain", description: "Prestige for the first time.", hidden: true }
 ];

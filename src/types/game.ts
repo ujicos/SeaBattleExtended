@@ -103,6 +103,8 @@ export interface NetworkMessage {
     | "forfeit"
     | "storm-board"
     | "admin-nuke"
+    | "chat"
+    | "reaction"
     | "timer"
     | "resync"
     | "game-over";

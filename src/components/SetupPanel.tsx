@@ -1,4 +1,4 @@
-import { RotateCw, Shuffle } from "lucide-react";
+import { ChevronDown, RotateCw, Shuffle } from "lucide-react";
 import { boardConfigs } from "../game/config";
 import type { GameSettings, Orientation } from "../types/game";
 
@@ -13,14 +13,30 @@ interface SetupPanelProps {
   readOnly?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
+  showPlacementControls?: boolean;
+  showStart?: boolean;
 }
 
-export function SetupPanel({ settings, orientation, onSettings, onRotate, onShuffle, onStart, ready, readOnly = false, expanded = true, onToggleExpanded }: SetupPanelProps) {
+export function SetupPanel({
+  settings,
+  orientation,
+  onSettings,
+  onRotate,
+  onShuffle,
+  onStart,
+  ready,
+  readOnly = false,
+  expanded = true,
+  onToggleExpanded,
+  showPlacementControls = true,
+  showStart = true
+}: SetupPanelProps) {
   return (
     <section className="panel">
       <button className="section-title setup-title-button" type="button" onClick={onToggleExpanded} aria-expanded={expanded}>
         <span>Game setup</span>
         <small>{orientation}</small>
+        <ChevronDown className={`collapse-chevron${expanded ? " expanded" : ""}`} size={16} />
       </button>
       {expanded && (
         <>
@@ -120,15 +136,17 @@ export function SetupPanel({ settings, orientation, onSettings, onRotate, onShuf
               </span>
             </label>
           </div>
-          <div className="action-row">
-            <button className="icon-button" type="button" onClick={onRotate} title="Rotate selected ship">
-              <RotateCw size={18} /> Rotate
-            </button>
-            <button className="icon-button" type="button" onClick={onShuffle} title="Shuffle ships">
-              <Shuffle size={18} /> Shuffle
-            </button>
-          </div>
-          <button className="primary" type="button" disabled={!ready} onClick={onStart}>Start practice battle</button>
+          {showPlacementControls && (
+            <div className="action-row">
+              <button className="icon-button" type="button" onClick={onRotate} title="Rotate selected ship">
+                <RotateCw size={18} /> Rotate
+              </button>
+              <button className="icon-button" type="button" onClick={onShuffle} title="Shuffle ships">
+                <Shuffle size={18} /> Shuffle
+              </button>
+            </div>
+          )}
+          {showStart && <button className="primary" type="button" disabled={!ready} onClick={onStart}>Start practice battle</button>}
         </>
       )}
     </section>
