@@ -169,7 +169,7 @@ Modifiers are optional pre-game rules selected from the setup panel before pract
 - `Fog Tide`: adds a very low-opacity animated fog layer over the target board. It follows the current wind indicator shown in the board header. It is visual pressure only; your selected square is still the square you fire at.
 - `Storm Mode`: every 18 total moves, `storm_warn.mp3` plays once 10 seconds before a storm wave hits. At impact, `storm_wave.mp3` plays and the storm may nudge one fully unhit ship by one square if normal placement rules still allow it. In P2P, moved boards are synced after the wave.
 - `Treasure Tiles`: hidden treasure can appear on water tiles. Hitting real treasure grants a one-hit shield. The shield blocks the next shot that would successfully hit one of your ships, consumes the shield, and lets that same square be fired at again later.
-- `Multi-bomb Treasure`: rare treasure with a 3.33% board-spawn chance, about 1 in 30 generated boards. When found, it arms one attack where you select 3 legal target squares before pressing Fire. The hit/miss results are not revealed until Fire is clicked.
+- `Multi-bomb Treasure`: rare treasure with a 3.33% board-spawn chance, about 1 in 30 generated boards. When found, it arms one attack where you select 3 legal target squares anywhere on the target board before pressing Fire. They do not need to be connected or in a row. Disabled squares, already resolved shots, and blocked sunk-ship buffer squares cannot be selected. The hit/miss results are not revealed until Fire is clicked.
 - `Heat-seeking Missile Treasure`: super rare treasure with a 1% board-spawn chance, about 1 in 100 generated boards. When found, it attempts to hit one random un-sunk enemy ship. Larger ships are weighted much higher than smaller ships; if only small ships remain, the missile can still hit but has a fair miss chance.
 - `Pirate Chaos`: adds rare cursed cannonballs and fake treasure. Cursed cannonballs have a 6% chance on eligible shots, about 1 in 17 shots, to curve to a valid neighboring square without preview; after firing, a toast says `Curveball!`. Fake treasure reveals itself after firing and grants no reward.
 
@@ -191,6 +191,8 @@ Drop your files into:
 - `public/assets/sprites`
 
 The manifest is in `src/services/assets.ts`. Replace or extend keys there to map game events to your files.
+
+Reaction audio keys currently use `react_laugh.mp3`, `react_confused.mp3`, `react_think.mp3`, and a drop-in `public/assets/audio/react_angry.mp3` path until an imported source asset is added for angry.
 
 ## Architecture
 

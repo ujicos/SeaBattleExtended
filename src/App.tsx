@@ -274,10 +274,10 @@ interface WindState {
 }
 
 const reactions = [
-  { id: "laugh", label: "Laugh" },
-  { id: "confused", label: "Confused" },
-  { id: "thinking", label: "Thinking" },
-  { id: "angry", label: "Angry" }
+  { id: "laugh", label: "Laugh", emoji: "😂" },
+  { id: "confused", label: "Confused", emoji: "❓" },
+  { id: "thinking", label: "Thinking", emoji: "🤔" },
+  { id: "angry", label: "Angry", emoji: "😡" }
 ] as const;
 
 const windOptions: WindState[] = [
@@ -2399,34 +2399,36 @@ function App() {
                   <section className="battle-social-panel">
                     <div className="reaction-row" aria-label="Quick reactions">
                       {reactions.map((reaction) => (
-                        <button className="secondary compact-action" type="button" key={reaction.id} onClick={() => sendReaction(reaction)}>
-                          {reaction.label}
+                        <button className="reaction-button" type="button" key={reaction.id} onClick={() => sendReaction(reaction)} title={reaction.label} aria-label={reaction.label}>
+                          <span aria-hidden="true">{reaction.emoji}</span>
                         </button>
                       ))}
                     </div>
-                    <div className="chat-log" aria-live="polite">
-                      {socialMessages.length ? (
-                        socialMessages.map((message) => (
-                          <span className={message.from === "local" ? "local" : "remote"} key={message.id}>
-                            <b>{message.from === "local" ? "You" : opponent.displayName}</b> {message.text}
-                          </span>
-                        ))
-                      ) : (
-                        <small>No chat yet.</small>
-                      )}
+                    <div className="chat-stack">
+                      <div className="chat-log" aria-live="polite">
+                        {socialMessages.length ? (
+                          socialMessages.map((message) => (
+                            <span className={message.from === "local" ? "local" : "remote"} key={message.id}>
+                              <b>{message.from === "local" ? "You" : opponent.displayName}</b> {message.text}
+                            </span>
+                          ))
+                        ) : (
+                          <small>No chat yet.</small>
+                        )}
+                      </div>
+                      <form
+                        className="chat-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          sendChat();
+                        }}
+                      >
+                        <input value={chatInput} maxLength={120} placeholder="Send a message" onChange={(event) => setChatInput(event.target.value)} />
+                        <button className="secondary compact-action" type="submit" disabled={!chatInput.trim()}>
+                          Send
+                        </button>
+                      </form>
                     </div>
-                    <form
-                      className="chat-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        sendChat();
-                      }}
-                    >
-                      <input value={chatInput} maxLength={120} placeholder="Send a message" onChange={(event) => setChatInput(event.target.value)} />
-                      <button className="secondary compact-action" type="submit" disabled={!chatInput.trim()}>
-                        Send
-                      </button>
-                    </form>
                   </section>
                 )}
                 {(game.phase === "victory" || game.phase === "defeat") && (

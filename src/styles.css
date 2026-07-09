@@ -1132,6 +1132,8 @@ select {
 
 .battle-social-panel {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
   gap: 8px;
   margin-top: 10px;
   padding: 10px;
@@ -1142,8 +1144,37 @@ select {
 
 .reaction-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, 42px);
+  align-content: start;
   gap: 6px;
+}
+
+.reaction-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: #eef8f7;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.reaction-button:active {
+  transform: scale(0.96);
+  background: rgba(72, 208, 187, 0.18);
+}
+
+.reaction-button span {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.chat-stack {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
 }
 
 .chat-log {
