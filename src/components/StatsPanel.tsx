@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { fetchGlobalLeaderboard, type GlobalLeaderboardPlayer } from "../services/network";
+import { fetchGlobalLeaderboard, isHiddenLeaderboardName, type GlobalLeaderboardPlayer } from "../services/network";
 import { getRankProgress, maxRank, xpForRank, type PlayerStats } from "../services/storage";
 
 function percent(part: number, total: number): string {
@@ -19,12 +19,14 @@ export function StatsPanel({
   stats,
   onRemoveMatch,
   onResetStats,
-  onPrestige
+  onPrestige,
+  showHiddenLeaderboardEntries = false
 }: {
   stats: PlayerStats;
   onRemoveMatch?: (matchId: string) => void;
   onResetStats?: () => void;
   onPrestige?: () => void;
+  showHiddenLeaderboardEntries?: boolean;
 }) {
   const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalLeaderboardPlayer[]>([]);
   const [leaderboardPage, setLeaderboardPage] = useState(0);
@@ -46,9 +48,12 @@ export function StatsPanel({
     ["Longest game", duration(stats.longestGameMs)]
   ];
   const leaderboardPageSize = 10;
-  const leaderboardPageCount = Math.max(1, Math.ceil(globalLeaderboard.length / leaderboardPageSize));
+  const visibleGlobalLeaderboard = showHiddenLeaderboardEntries
+    ? globalLeaderboard
+    : globalLeaderboard.filter((player) => !isHiddenLeaderboardName(player.displayName));
+  const leaderboardPageCount = Math.max(1, Math.ceil(visibleGlobalLeaderboard.length / leaderboardPageSize));
   const leaderboardStart = leaderboardPage * leaderboardPageSize;
-  const leaderboardPlayers = globalLeaderboard.slice(leaderboardStart, leaderboardStart + leaderboardPageSize);
+  const leaderboardPlayers = visibleGlobalLeaderboard.slice(leaderboardStart, leaderboardStart + leaderboardPageSize);
 
   useEffect(() => {
     let active = true;
@@ -62,6 +67,10 @@ export function StatsPanel({
       active = false;
     };
   }, [stats.lifetimeXp]);
+
+  useEffect(() => {
+    setLeaderboardPage((page) => Math.min(page, leaderboardPageCount - 1));
+  }, [leaderboardPageCount]);
 
   return (
     <section className="panel">
@@ -100,9 +109,9 @@ export function StatsPanel({
       <div className="leaderboard-panel">
         <div className="section-title">
           <span>Global leaderboard</span>
-          <small>{globalLeaderboard.length ? `Page ${leaderboardPage + 1}/${leaderboardPageCount}` : "D1"}</small>
+          <small>{visibleGlobalLeaderboard.length ? `Page ${leaderboardPage + 1}/${leaderboardPageCount}` : "D1"}</small>
         </div>
-        {globalLeaderboard.length ? (
+        {visibleGlobalLeaderboard.length ? (
           leaderboardPlayers.map((player, index) => (
             <div className="leaderboard-row" key={player.playerId}>
               <span>#{leaderboardStart + index + 1} {player.displayName}</span>
@@ -117,12 +126,12 @@ export function StatsPanel({
             <small>D1</small>
           </div>
         )}
-        {globalLeaderboard.length > leaderboardPageSize && (
+        {visibleGlobalLeaderboard.length > leaderboardPageSize && (
           <div className="leaderboard-controls">
             <button className="secondary compact-action" type="button" disabled={leaderboardPage === 0} onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}>
               Previous
             </button>
-            <small>{leaderboardStart + 1}-{Math.min(globalLeaderboard.length, leaderboardStart + leaderboardPageSize)} of {globalLeaderboard.length}</small>
+            <small>{leaderboardStart + 1}-{Math.min(visibleGlobalLeaderboard.length, leaderboardStart + leaderboardPageSize)} of {visibleGlobalLeaderboard.length}</small>
             <button className="secondary compact-action" type="button" disabled={leaderboardPage >= leaderboardPageCount - 1} onClick={() => setLeaderboardPage((page) => Math.min(leaderboardPageCount - 1, page + 1))}>
               Next
             </button>

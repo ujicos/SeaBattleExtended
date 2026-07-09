@@ -42,6 +42,10 @@ export interface AdminStatus extends PresenceStatus {
   };
 }
 
+export function isHiddenLeaderboardName(displayName: string): boolean {
+  return displayName.toLowerCase().includes("dev");
+}
+
 export function loadAdminToken(): { token: string; remembered: boolean } {
   const remembered = localStorage.getItem(adminTokenLocalKey);
   if (remembered) {

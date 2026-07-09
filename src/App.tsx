@@ -15,6 +15,7 @@ import {
   adminCloseLobby,
   fetchAdminStatus,
   fetchPresenceStatus,
+  isHiddenLeaderboardName,
   leavePresence,
   loadAdminToken,
   PeerGameClient,
@@ -433,6 +434,12 @@ function App() {
     return () => window.clearInterval(interval);
   }, [game.phase, matchMode, networkStatus, remoteReady]);
 
+  useEffect(() => {
+    if (matchMode === "p2p" && peerRole === "guest" && game.phase === "placing") {
+      setSetupPanelExpanded(false);
+    }
+  }, [game.phase, matchMode, peerRole]);
+
   function attackDirection(coord: Coordinate): AttackAnimation["direction"] {
     const top = coord.row;
     const bottom = config.size - coord.row - 1;
@@ -702,7 +709,7 @@ function App() {
   useEffect(() => {
     const rank = getRankProgress(stats.xp);
     const timeout = window.setTimeout(() => {
-      if (suppressMatchStatsRef.current) {
+      if (suppressMatchStatsRef.current || isHiddenLeaderboardName(profile.displayName)) {
         return;
       }
       void submitGlobalLeaderboard({
@@ -2159,7 +2166,6 @@ function App() {
           {game.phase !== "battle" && game.phase !== "victory" && game.phase !== "defeat" && (
             <SetupPanel
               settings={game.settings}
-              orientation={orientation}
               onSettings={updateSettings}
               onRotate={() => setOrientation((value) => (value === "horizontal" ? "vertical" : "horizontal"))}
               onShuffle={shuffle}
@@ -2465,7 +2471,7 @@ function App() {
           <section className="panel lobby-actions-panel">
             <div className="section-title">
               <span>P2P Lobby</span>
-              <small className="console-status">{networkStatus}</small>
+              {!networkStatus.toLowerCase().includes("offline practice") && <small className="console-status">{networkStatus}</small>}
             </div>
             <button className="primary" type="button" onClick={() => void createRoom()}>Create Game</button>
             {roomCode && <div className="room-code">{roomCode}</div>}
@@ -2577,6 +2583,7 @@ function App() {
       {activeTab === "stats" && (
         <StatsPanel
           stats={stats}
+          showHiddenLeaderboardEntries={adminVerified}
           onRemoveMatch={(matchId) => setStats((current) => removeMatch(current, matchId))}
           onResetStats={() => setStats(makeEmptyStats())}
           onPrestige={() =>

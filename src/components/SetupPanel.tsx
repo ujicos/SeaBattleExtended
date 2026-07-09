@@ -1,10 +1,9 @@
 import { ChevronDown, RotateCw, Shuffle } from "lucide-react";
 import { boardConfigs } from "../game/config";
-import type { GameSettings, Orientation } from "../types/game";
+import type { GameSettings } from "../types/game";
 
 interface SetupPanelProps {
   settings: GameSettings;
-  orientation: Orientation;
   onSettings: (settings: GameSettings) => void;
   onRotate: () => void;
   onShuffle: () => void;
@@ -19,7 +18,6 @@ interface SetupPanelProps {
 
 export function SetupPanel({
   settings,
-  orientation,
   onSettings,
   onRotate,
   onShuffle,
@@ -35,7 +33,6 @@ export function SetupPanel({
     <section className="panel">
       <button className="section-title setup-title-button" type="button" onClick={onToggleExpanded} aria-expanded={expanded}>
         <span>Game setup</span>
-        <small>{orientation}</small>
         <ChevronDown className={`collapse-chevron${expanded ? " expanded" : ""}`} size={16} />
       </button>
       {expanded && (
