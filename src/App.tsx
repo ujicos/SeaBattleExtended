@@ -51,6 +51,7 @@ const guestIdentity: PeerIdentity = {
   playerId: "local_ai",
   displayName: "Practice Fleet",
   avatar: "radar",
+  prestige: 0,
   statsSummary: { games: 0, wins: 0, losses: 0, winRate: 0 }
 };
 
@@ -58,6 +59,7 @@ const waitingIdentity: PeerIdentity = {
   playerId: "waiting",
   displayName: "Waiting for opponent",
   avatar: "radar",
+  prestige: 0,
   statsSummary: { games: 0, wins: 0, losses: 0, winRate: 0 }
 };
 
@@ -382,6 +384,7 @@ function App() {
   const [adminVerified, setAdminVerified] = useState(false);
   const [adminCloseCode, setAdminCloseCode] = useState("");
   const [revealHiddenAchievements, setRevealHiddenAchievements] = useState(false);
+  const [prestigePreview, setPrestigePreview] = useState<number | null>(null);
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
@@ -420,7 +423,9 @@ function App() {
   const battleLeadLabel = leadingSide === "local" ? profile.displayName : leadingSide === "remote" ? opponent.displayName : "tied";
   const leadDifference = Math.abs(enemyShipsSunk - localShipsSunk);
   const crownScale = leadingSide === "remote" ? 0.88 : leadingSide === "local" ? 1 + Math.min(leadDifference, 8) * 0.045 : 1;
-  const localPrestigeClass = prestigeNameClass(stats.prestige);
+  const localVisualPrestige = adminVerified && prestigePreview !== null ? prestigePreview : stats.prestige;
+  const localPrestigeClass = prestigeNameClass(localVisualPrestige);
+  const opponentPrestigeClass = prestigeNameClass(opponent.prestige ?? 0);
   const preview = useMemo(
     () =>
       hovered && selectedShip && game.phase === "placing"
@@ -748,6 +753,12 @@ function App() {
   useEffect(() => {
     saveStats(stats);
   }, [stats]);
+
+  useEffect(() => {
+    if (matchMode === "p2p" && roomCode && network.current) {
+      network.current.send("identity", makeIdentity(profile, stats));
+    }
+  }, [matchMode, profile, roomCode, stats.losses, stats.prestige, stats.totalGames, stats.wins]);
 
   useEffect(() => {
     const rank = getRankProgress(stats.xp);
@@ -2331,11 +2342,11 @@ function App() {
                 </div>
                 <div className="battle-turn">
                   <small>Turn</small>
-                  <strong>{game.turn === "local" ? "You" : opponent.displayName}</strong>
+                  <strong className={game.turn === "local" ? localPrestigeClass : opponentPrestigeClass}>{game.turn === "local" ? "You" : opponent.displayName}</strong>
                 </div>
                 <div className="battle-player battle-player-remote">
                   <small>{peerRole === "guest" ? "Host" : "Enemy"}</small>
-                  <strong>{opponent.displayName}</strong>
+                  <strong className={opponentPrestigeClass}>{opponent.displayName}</strong>
                 </div>
                 {game.settings.blitz.enabled && <div className="timer">{Math.ceil(clock)}</div>}
                 <button className="icon-button stats-match-button" type="button" onClick={() => setShowOpponentStats((value) => !value)} title="Opponent stats">
@@ -2404,10 +2415,10 @@ function App() {
                   </div>
                   <div className="lead-crown">
                     <Crown size={34} />
-                    <strong>{battleLeadLabel}</strong>
+                    <strong className={leadingSide === "local" ? localPrestigeClass : leadingSide === "remote" ? opponentPrestigeClass : undefined}>{battleLeadLabel}</strong>
                   </div>
                   <div className="fleet-count fleet-count-remote">
-                    <strong>{opponent.displayName}</strong>
+                    <strong className={opponentPrestigeClass}>{opponent.displayName}</strong>
                     <small>{enemyShipsLeft}</small>
                   </div>
                 </div>
@@ -2635,6 +2646,8 @@ function App() {
         <StatsPanel
           stats={stats}
           showHiddenLeaderboardEntries={adminVerified}
+          prestigePreview={adminVerified ? prestigePreview : null}
+          onPrestigePreviewChange={adminVerified ? setPrestigePreview : undefined}
           onRemoveMatch={(matchId) => setStats((current) => removeMatch(current, matchId))}
           onResetStats={() => setStats(makeEmptyStats())}
           onPrestige={() =>

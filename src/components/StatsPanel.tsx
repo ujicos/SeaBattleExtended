@@ -20,13 +20,17 @@ export function StatsPanel({
   onRemoveMatch,
   onResetStats,
   onPrestige,
-  showHiddenLeaderboardEntries = false
+  showHiddenLeaderboardEntries = false,
+  prestigePreview = null,
+  onPrestigePreviewChange
 }: {
   stats: PlayerStats;
   onRemoveMatch?: (matchId: string) => void;
   onResetStats?: () => void;
   onPrestige?: () => void;
   showHiddenLeaderboardEntries?: boolean;
+  prestigePreview?: number | null;
+  onPrestigePreviewChange?: (prestige: number | null) => void;
 }) {
   const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalLeaderboardPlayer[]>([]);
   const [leaderboardPage, setLeaderboardPage] = useState(0);
@@ -97,6 +101,20 @@ export function StatsPanel({
         <button className="secondary reset-stats-button" type="button" onClick={onResetStats}>
           Reset stats
         </button>
+      )}
+      {onPrestigePreviewChange && (
+        <label className="field prestige-preview-field">
+          Prestige effect preview
+          <select
+            value={prestigePreview ?? ""}
+            onChange={(event) => onPrestigePreviewChange(event.target.value === "" ? null : Number(event.target.value))}
+          >
+            <option value="">Actual prestige</option>
+            {Array.from({ length: 11 }, (_, prestige) => (
+              <option value={prestige} key={prestige}>Preview prestige {prestige}</option>
+            ))}
+          </select>
+        </label>
       )}
       <div className="stats-grid">
         {statCards.map(([label, value]) => (

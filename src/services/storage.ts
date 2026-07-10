@@ -264,6 +264,7 @@ export function makeIdentity(profile: PlayerProfile, stats: PlayerStats): PeerId
     playerId: profile.playerId,
     displayName: profile.displayName,
     avatar: profile.avatar,
+    prestige: stats.prestige,
     statsSummary: summarizeStats(stats)
   };
 }
