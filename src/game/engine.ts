@@ -4,7 +4,10 @@ import type { BoardState, Coordinate, GameSettings, GameState, PlayerSide, ShotO
 
 export const treasureSpawnChances = {
   multiBomb: 1 / 30,
-  heatMissile: 1 / 100
+  heatMissile: 1 / 100,
+  repairKit: 1 / 22,
+  splashZone: 1 / 25,
+  decoy: 1 / 45
 } as const;
 
 export function createBoardForSettings(settings: GameSettings): BoardState {
@@ -14,12 +17,18 @@ export function createBoardForSettings(settings: GameSettings): BoardState {
   const fakeCount = settings.modifiers.pirateChaos ? Math.max(1, Math.floor(config.size / 12)) : 0;
   const multiBombCount = settings.modifiers.treasureTiles && Math.random() < treasureSpawnChances.multiBomb ? 1 : 0;
   const heatMissileCount = settings.modifiers.treasureTiles && Math.random() < treasureSpawnChances.heatMissile ? 1 : 0;
-  return shieldCount || fakeCount || multiBombCount || heatMissileCount
+  const repairKitCount = settings.modifiers.treasureTiles && Math.random() < treasureSpawnChances.repairKit ? 1 : 0;
+  const splashZoneCount = settings.modifiers.treasureTiles && Math.random() < treasureSpawnChances.splashZone ? 1 : 0;
+  const decoyCount = settings.modifiers.pirateChaos && Math.random() < treasureSpawnChances.decoy ? 1 : 0;
+  return shieldCount || fakeCount || multiBombCount || heatMissileCount || repairKitCount || splashZoneCount || decoyCount
     ? seedTreasures(board, {
         shield: shieldCount,
         fake: fakeCount,
         "multi-bomb": multiBombCount,
-        "heat-missile": heatMissileCount
+        "heat-missile": heatMissileCount,
+        "repair-kit": repairKitCount,
+        "splash-zone": splashZoneCount,
+        decoy: decoyCount
       })
     : board;
 }

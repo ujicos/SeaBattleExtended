@@ -172,6 +172,54 @@ export function markShieldedShot(board: BoardState, coord: Coordinate): BoardSta
   };
 }
 
+export function repairOneDamagedShipCell(board: BoardState): { board: BoardState; repaired: boolean } {
+  const candidates = board.ships
+    .filter((ship) => ship.hits.length > 0 && !isShipSunk(ship))
+    .flatMap((ship) => ship.hits.map((hit) => ({ ship, hit })));
+
+  if (!candidates.length) {
+    return { board, repaired: false };
+  }
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  const hitKey = coordKey(pick.hit);
+  return {
+    board: {
+      ...board,
+      ships: board.ships.map((ship) => (
+        ship.id === pick.ship.id
+          ? { ...ship, hits: ship.hits.filter((hit) => coordKey(hit) !== hitKey) }
+          : ship
+      )),
+      shots: Object.fromEntries(Object.entries(board.shots).filter(([key]) => key !== hitKey))
+    },
+    repaired: true
+  };
+}
+
+export function markSplashZone(board: BoardState, center: Coordinate): BoardState {
+  const shots = { ...board.shots };
+  for (let row = center.row - 1; row <= center.row + 1; row += 1) {
+    for (let col = center.col - 1; col <= center.col + 1; col += 1) {
+      const coord = { row, col };
+      const key = coordKey(coord);
+      if (
+        row < 0 ||
+        col < 0 ||
+        row >= board.size ||
+        col >= board.size ||
+        key === coordKey(center) ||
+        shots[key] ||
+        findShipAt(board, coord)
+      ) {
+        continue;
+      }
+      shots[key] = "miss";
+    }
+  }
+  return { ...board, shots };
+}
+
 export function receiveShot(board: BoardState, coord: Coordinate): { board: BoardState; result: ShotResult; shipId?: string } {
   const key = coordKey(coord);
   if (hasBlockingShot(board, coord)) {
@@ -262,7 +310,7 @@ export function seedTreasures(board: BoardState, treasuresToPlace: Partial<Recor
     treasures[coordKey(coord)] = kind;
   };
 
-  for (const kind of ["shield", "fake", "multi-bomb", "heat-missile"] as const) {
+  for (const kind of ["shield", "fake", "multi-bomb", "heat-missile", "repair-kit", "splash-zone", "decoy"] as const) {
     const count = treasuresToPlace[kind] ?? 0;
     for (let index = 0; index < count; index += 1) {
       place(kind);

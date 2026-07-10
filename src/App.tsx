@@ -6,7 +6,7 @@ import type { AttackAnimation } from "./components/BoardGrid";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { StatsPanel } from "./components/StatsPanel";
-import { allShipsSunk, canPlaceShip, coordKey, findShipAt, findTreasureAt, getShipCells, hasBlockingShot, isShipSunk, markShieldedShot, markTreasureShot, placeShip, receiveShot } from "./game/board";
+import { allShipsSunk, canPlaceShip, coordKey, findShipAt, findTreasureAt, getShipCells, hasBlockingShot, isShipSunk, markShieldedShot, markSplashZone, markTreasureShot, placeShip, receiveShot, repairOneDamagedShipCell } from "./game/board";
 import { boardConfigs, defaultSettings, getBoardConfig } from "./game/config";
 import { attack, createBoardForSettings, createInitialGame, resetBoards, startBattle } from "./game/engine";
 import { assets } from "./services/assets";
@@ -267,6 +267,7 @@ interface ReadyPayload {
 interface ShotPayload {
   coord: Coordinate;
   treasureCoord?: Coordinate;
+  attackerBoard?: BoardState;
 }
 
 interface MultiShotPayload {
@@ -284,6 +285,7 @@ interface ShotResultPayload {
   defenderShield?: number;
   treasureKind?: TreasureKind;
   chaosMessage?: string;
+  attackerBoard?: BoardState;
 }
 
 interface MultiShotResultPayload {
@@ -374,6 +376,8 @@ function App() {
   const [localShield, setLocalShield] = useState(0);
   const [remoteShield, setRemoteShield] = useState(0);
   const [localMultiBombShots, setLocalMultiBombShots] = useState(0);
+  const [localSplashZones, setLocalSplashZones] = useState(0);
+  const [remoteSplashZones, setRemoteSplashZones] = useState(0);
   const [wind, setWind] = useState<WindState>(() => randomWind());
   const [placementBoardExpanded, setPlacementBoardExpanded] = useState(false);
   const [setupPanelExpanded, setSetupPanelExpanded] = useState(true);
@@ -392,6 +396,8 @@ function App() {
   const remoteBoardReadyRef = useRef<BoardState | null>(null);
   const localShieldRef = useRef(localShield);
   const remoteShieldRef = useRef(remoteShield);
+  const localSplashZonesRef = useRef(localSplashZones);
+  const remoteSplashZonesRef = useRef(remoteSplashZones);
   const boardSwitchTimer = useRef<number | null>(null);
   const boardReturnTimer = useRef<number | null>(null);
   const copyNoticeTimer = useRef<number | null>(null);
@@ -467,6 +473,14 @@ function App() {
   useEffect(() => {
     remoteShieldRef.current = remoteShield;
   }, [remoteShield]);
+
+  useEffect(() => {
+    localSplashZonesRef.current = localSplashZones;
+  }, [localSplashZones]);
+
+  useEffect(() => {
+    remoteSplashZonesRef.current = remoteSplashZones;
+  }, [remoteSplashZones]);
 
   useEffect(() => {
     const shouldAnimateWaiting = matchMode === "p2p" && game.phase === "placing" && (!remoteReady || /Waiting/.test(networkStatus));
@@ -971,6 +985,8 @@ function App() {
     setLocalShield(0);
     setRemoteShield(0);
     setLocalMultiBombShots(0);
+    setLocalSplashZones(0);
+    setRemoteSplashZones(0);
     setGame((current) => ({
       ...resetBoards(current, nextSettings),
       localBoard: createBoardForSettings(nextSettings),
@@ -1024,6 +1040,8 @@ function App() {
     setLocalShield(0);
     setRemoteShield(0);
     setLocalMultiBombShots(0);
+    setLocalSplashZones(0);
+    setRemoteSplashZones(0);
     setGame((current) => ({ ...current, localBoard: board, selectedShipId: nextUnplacedShipId(current.settings, new Set(board.ships.map((ship) => ship.id))) }));
   }
 
@@ -1034,6 +1052,8 @@ function App() {
     setLocalShield(0);
     setRemoteShield(0);
     setLocalMultiBombShots(0);
+    setLocalSplashZones(0);
+    setRemoteSplashZones(0);
     setXpBreakdown(null);
     setMatchMode("practice");
     setOpponent(guestIdentity);
@@ -1128,6 +1148,15 @@ function App() {
     }
     if (kind === "heat-missile") {
       return "Heat-seeking missile";
+    }
+    if (kind === "repair-kit") {
+      return "Repair Kit";
+    }
+    if (kind === "splash-zone") {
+      return "Splash Zone";
+    }
+    if (kind === "decoy") {
+      return "Decoy";
     }
     return kind === "shield" ? "TREASURE" : "FAKE TREASURE";
   }
@@ -1290,6 +1319,7 @@ function App() {
     const treasure = findTreasureAt(game.remoteBoard, finalCoord);
     if (treasure) {
       let remoteBoard = markTreasureShot(game.remoteBoard, finalCoord);
+      let attackerBoard: BoardState | undefined;
       let result: ShotResult = "miss";
       let missileCoord: Coordinate | null = null;
       const nextLocalShield = treasure === "shield" ? localShield + 1 : localShield;
@@ -1316,6 +1346,29 @@ function App() {
           showEventToast("Heat-seeking missile lost the signal.");
         }
         unlockLocalAchievement("treasure_found");
+      } else if (treasure === "repair-kit") {
+        const repaired = repairOneDamagedShipCell(game.localBoard);
+        attackerBoard = repaired.repaired ? repaired.board : undefined;
+        if (repaired.repaired) {
+          setGame((current) => ({ ...current, localBoard: repaired.board }));
+          showEventToast("Repair Kit patched one damaged ship segment.");
+        } else {
+          showEventToast("Repair Kit found, but your fleet is already patched.");
+        }
+        unlockLocalAchievement("treasure_found");
+        unlockLocalAchievement("repair_kit");
+        audio.play("turn", 0.65);
+      } else if (treasure === "splash-zone") {
+        if (matchMode === "practice") {
+          setLocalSplashZones((value) => value + 1);
+        }
+        unlockLocalAchievement("treasure_found");
+        unlockLocalAchievement("splash_zone");
+        audio.play("turn", 0.65);
+        showEventToast("Splash Zone armed. Your next hit splashes nearby water.");
+      } else if (treasure === "decoy") {
+        unlockLocalAchievement("decoy_found");
+        showEventToast("Decoy! The treasure was bait.");
       } else {
         unlockLocalAchievement("fake_treasure");
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Fake treasure! You got faked out.`);
@@ -1324,6 +1377,7 @@ function App() {
       const nextTurn: PlayerSide = winner || result === "hit" || result === "sunk" ? "local" : "remote";
       const state: GameState = {
         ...game,
+        localBoard: attackerBoard ?? game.localBoard,
         remoteBoard,
         turn: winner ? "local" : nextTurn,
         winner,
@@ -1339,7 +1393,7 @@ function App() {
       playShotResultSound("miss");
       setGameAfterImpact(state, game.turn);
       setStats((current) => awardXp({ ...current, totalShots: current.totalShots + 1 }, xpAwards.shot));
-      network.current?.send("shot", { coord: missileCoord ?? finalCoord, treasureCoord: missileCoord ? finalCoord : undefined } satisfies ShotPayload);
+      network.current?.send("shot", { coord: missileCoord ?? finalCoord, treasureCoord: missileCoord ? finalCoord : undefined, attackerBoard } satisfies ShotPayload);
       if (winner) {
         endMatch("win", state);
         return;
@@ -1381,6 +1435,14 @@ function App() {
     if (outcome.result === "invalid" || outcome.result === "duplicate") {
       return;
     }
+    const localSplashActive = localSplashZones > 0 && (outcome.result === "hit" || outcome.result === "sunk");
+    const resolvedState = localSplashActive
+      ? { ...state, remoteBoard: markSplashZone(state.remoteBoard, finalCoord) }
+      : state;
+    if (localSplashActive) {
+      setLocalSplashZones((value) => Math.max(0, value - 1));
+      showEventToast("Splash Zone marked nearby water.");
+    }
     if (chaos.message && !sameCoord(coord, finalCoord)) {
       unlockLocalAchievement("cursed_curve");
       showEventToast(chaos.message);
@@ -1394,7 +1456,7 @@ function App() {
     );
     playAttackVisual("remote", finalCoord, outcome.result);
     playShotResultSound(outcome.result);
-    setGameAfterImpact(state, game.turn);
+    setGameAfterImpact(resolvedState, game.turn);
     setStats((current) =>
       awardXp(
         {
@@ -1417,11 +1479,11 @@ function App() {
     }
     network.current?.send("shot", { coord: finalCoord } satisfies ShotPayload);
     if (outcome.winner) {
-      endMatch("win", state);
+      endMatch("win", resolvedState);
       return;
     }
     if (matchMode === "practice" && outcome.nextTurn === "remote") {
-      window.setTimeout(() => remoteTurn(state), 450);
+      window.setTimeout(() => remoteTurn(resolvedState), 450);
     }
   }
 
@@ -1435,13 +1497,15 @@ function App() {
       const localBoard = markTreasureShot(currentGame.localBoard, pick);
       if (treasure === "shield") {
         setRemoteShield((value) => value + 1);
+      } else if (treasure === "splash-zone") {
+        setRemoteSplashZones((value) => value + 1);
       }
       const state: GameState = {
         ...currentGame,
         localBoard,
         turn: "local",
         moves: currentGame.moves + 1,
-        log: [`remote ${treasure === "shield" ? "TREASURE" : "FAKE TREASURE"} at ${pick.row + 1},${pick.col + 1}`, ...currentGame.log].slice(0, 30)
+        log: [`remote ${treasureLabel(treasure)} at ${pick.row + 1},${pick.col + 1}`, ...currentGame.log].slice(0, 30)
       };
       playAttackVisual("local", pick, "miss", OPPONENT_SOUND_VOLUME);
       playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
@@ -1456,6 +1520,7 @@ function App() {
       setLocalShield((value) => Math.max(0, value - 1));
       showEventToast("Your shield blocked a hit.");
       unlockLocalAchievement("shield_save");
+      unlockLocalAchievement("denied");
       const state: GameState = {
         ...currentGame,
         localBoard: markShieldedShot(currentGame.localBoard, pick),
@@ -1518,9 +1583,21 @@ function App() {
       if (stats.wins + 1 >= 10) {
         unlockLocalAchievement("ten_wins");
       }
+      if (state.localBoard.ships.filter((ship) => !isShipSunk(ship)).length === 1) {
+        unlockLocalAchievement("close_call");
+      }
+      if (state.localBoard.ships.some((ship) => ship.length === 1 && !isShipSunk(ship))) {
+        unlockLocalAchievement("tiny_terror");
+      }
+      if (state.settings.modifiers.stormMode && stats.achievements.storm_chaser) {
+        unlockLocalAchievement("storm_rider");
+      }
     }
     if (state.moves >= 40) {
       unlockLocalAchievement("long_battle");
+    }
+    if (state.moves > 75) {
+      unlockLocalAchievement("long_voyage");
     }
     const modeLabels = matchModeLabels(state.settings);
     modeLabels.forEach((mode) => {
@@ -1701,6 +1778,8 @@ function App() {
         setLocalShield(0);
         setRemoteShield(0);
         setLocalMultiBombShots(0);
+        setLocalSplashZones(0);
+        setRemoteSplashZones(0);
         setSocialMessages([]);
         setActiveTab("play");
         setSetupPanelExpanded(false);
@@ -1811,7 +1890,8 @@ function App() {
         const payload = message.payload as ShotPayload | Coordinate;
         const coord = "coord" in payload ? payload.coord : payload;
         const treasureCoord = "coord" in payload ? payload.treasureCoord : undefined;
-        receiveRemoteShot(coord, treasureCoord);
+        const attackerBoard = "coord" in payload ? payload.attackerBoard : undefined;
+        receiveRemoteShot(coord, treasureCoord, attackerBoard);
         return;
       }
 
@@ -1859,6 +1939,8 @@ function App() {
     setXpBreakdown(null);
     setSocialMessages([]);
     setLocalMultiBombShots(0);
+    setLocalSplashZones(0);
+    setRemoteSplashZones(0);
     setGame((current) => startBattle({ ...current, remoteBoard: remoteBoardReady }, remoteBoardReady));
     network.current?.send("start", { startedAt: Date.now() });
     setNetworkStatus("Battle live. Your turn.");
@@ -1887,7 +1969,7 @@ function App() {
     endMatch("win", nextState);
   }
 
-  function receiveRemoteShot(coord: Coordinate, treasureCoord?: Coordinate) {
+  function receiveRemoteShot(coord: Coordinate, treasureCoord?: Coordinate, attackerBoard?: BoardState) {
     const current = gameRef.current;
     const initialBoard = treasureCoord ? markTreasureShot(current.localBoard, treasureCoord) : current.localBoard;
     if (treasureCoord) {
@@ -1905,12 +1987,20 @@ function App() {
         showEventToast(`${opponent.displayName} armed a multi-bomb.`);
       } else if (treasure === "heat-missile") {
         showEventToast(`${opponent.displayName} found a heat-seeking missile.`);
+      } else if (treasure === "repair-kit") {
+        showEventToast(`${opponent.displayName} used a Repair Kit.`);
+      } else if (treasure === "splash-zone") {
+        setRemoteSplashZones((value) => value + 1);
+        showEventToast(`${opponent.displayName} armed a Splash Zone.`);
+      } else if (treasure === "decoy") {
+        showEventToast(`${opponent.displayName} hit a decoy.`);
       }
       playAttackVisual("local", coord, "miss", OPPONENT_SOUND_VOLUME);
       playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
       const nextState: GameState = {
         ...current,
         localBoard: board,
+        remoteBoard: attackerBoard ?? current.remoteBoard,
         turn: "local",
         moves: current.moves + 1,
         log: [`remote ${treasure === "shield" ? "TREASURE" : "FAKE TREASURE"} at ${coord.row + 1},${coord.col + 1}`, ...current.log].slice(0, 30)
@@ -1936,6 +2026,7 @@ function App() {
       setLocalShield(nextLocalShield);
       showEventToast("Your shield blocked a hit.");
       unlockLocalAchievement("shield_save");
+      unlockLocalAchievement("denied");
       const board = markShieldedShot(initialBoard, coord);
       playAttackVisual("local", coord, "shielded", OPPONENT_SOUND_VOLUME);
       playShotResultSound("shielded", OPPONENT_SOUND_VOLUME);
@@ -1972,14 +2063,20 @@ function App() {
       } satisfies ShotResultPayload);
       return;
     }
+    const remoteSplashActive = remoteSplashZonesRef.current > 0 && (shot.result === "hit" || shot.result === "sunk");
+    const shotBoard = remoteSplashActive ? markSplashZone(shot.board, coord) : shot.board;
+    if (remoteSplashActive) {
+      setRemoteSplashZones((value) => Math.max(0, value - 1));
+      showEventToast(`${opponent.displayName}'s Splash Zone marked nearby water.`);
+    }
     playAttackVisual("local", coord, shot.result, OPPONENT_SOUND_VOLUME);
     playShotResultSound(shot.result, OPPONENT_SOUND_VOLUME);
-    const winner: PlayerSide | null = allShipsSunk(shot.board) ? "remote" : null;
+    const winner: PlayerSide | null = allShipsSunk(shotBoard) ? "remote" : null;
     const nextTurn: PlayerSide = shot.result === "miss" ? "local" : "remote";
     showBattleBoard(nextTurn === "local" && !winner ? "target" : "fleet", 0, nextTurn === "local" && !winner ? BOARD_SWITCH_DELAY_MS : 0);
     const nextState: GameState = {
       ...current,
-      localBoard: shot.board,
+      localBoard: shotBoard,
       turn: winner ? "remote" : nextTurn,
       winner,
       phase: winner ? "defeat" : current.phase,
@@ -1991,7 +2088,7 @@ function App() {
     network.current?.send("shot-result", {
       coord,
       result: shot.result,
-      board: shot.board,
+      board: shotBoard,
       shipId: shot.shipId,
       nextTurn,
       winner,
@@ -2097,6 +2194,18 @@ function App() {
       showEventToast("Multi-bomb armed. Pick 3 targets.");
     } else if (payload.treasureKind === "heat-missile") {
       showEventToast("Heat-seeking missile launched.");
+    } else if (payload.treasureKind === "repair-kit") {
+      unlockLocalAchievement("treasure_found");
+      unlockLocalAchievement("repair_kit");
+      showEventToast("Repair Kit patched your fleet.");
+    } else if (payload.treasureKind === "splash-zone") {
+      setLocalSplashZones((value) => value + 1);
+      unlockLocalAchievement("treasure_found");
+      unlockLocalAchievement("splash_zone");
+      showEventToast("Splash Zone armed. Your next hit splashes nearby water.");
+    } else if (payload.treasureKind === "decoy") {
+      unlockLocalAchievement("decoy_found");
+      showEventToast("Decoy! The treasure was bait.");
     } else if (payload.treasureKind === "fake") {
       showEventToast("Fake treasure! You got faked out.");
     } else if (payload.result === "shielded") {
