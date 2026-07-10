@@ -84,6 +84,7 @@ export interface PeerIdentity {
   displayName: string;
   avatar: string;
   prestige: number;
+  developer?: boolean;
   statsSummary: {
     games: number;
     wins: number;

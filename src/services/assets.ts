@@ -1,6 +1,7 @@
 import bomberFlybyUrl from "../assets/audio/bomber_flyby.mp3";
 import defeatUrl from "../assets/audio/defeat.mp3";
 import explodeUrl from "../assets/audio/explode.mp3";
+import reactAngryUrl from "../assets/audio/react_angry.mp3";
 import reactConfusedUrl from "../assets/audio/react_confused.mp3";
 import reactLaughUrl from "../assets/audio/react_laugh.mp3";
 import reactThinkUrl from "../assets/audio/react_think.mp3";
@@ -32,7 +33,7 @@ export const assetManifest: AssetEntry[] = [
   { key: "react-laugh", kind: "audio", path: reactLaughUrl, description: "Laugh reaction cue" },
   { key: "react-confused", kind: "audio", path: reactConfusedUrl, description: "Confused reaction cue" },
   { key: "react-thinking", kind: "audio", path: reactThinkUrl, description: "Thinking reaction cue" },
-  { key: "react-angry", kind: "audio", path: "/assets/audio/react_angry.mp3", description: "Angry reaction cue" },
+  { key: "react-angry", kind: "audio", path: reactAngryUrl, description: "Angry reaction cue" },
   { key: "water", kind: "texture", path: "/assets/textures/water.png", description: "Board water texture" },
   { key: "ship", kind: "texture", path: "/assets/textures/ship.png", description: "Ship hull texture" },
   { key: "marker-hit", kind: "sprite", path: "/assets/sprites/hit.png", description: "Hit marker sprite" },

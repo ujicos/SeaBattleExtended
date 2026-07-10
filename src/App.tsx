@@ -63,6 +63,13 @@ const waitingIdentity: PeerIdentity = {
   statsSummary: { games: 0, wins: 0, losses: 0, winRate: 0 }
 };
 
+function identityForConnection(profile: PlayerProfile, stats: PlayerStats, developer: boolean): PeerIdentity {
+  return {
+    ...makeIdentity(profile, stats),
+    developer
+  };
+}
+
 function nextUnplacedShipId(settings: GameSettings, placedIds: Set<string>): string | null {
   return getBoardConfig(settings.boardId).fleet.find((ship) => !placedIds.has(ship.id))?.id ?? null;
 }
@@ -358,6 +365,7 @@ function App() {
   const [showOpponentStats, setShowOpponentStats] = useState(false);
   const [socialMessages, setSocialMessages] = useState<SocialMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [reactionsOpen, setReactionsOpen] = useState(false);
   const [attackVisual, setAttackVisual] = useState<(AttackAnimation & { board: "local" | "remote" }) | null>(null);
   const [matchMode, setMatchMode] = useState<MatchMode>("practice");
   const [peerRole, setPeerRole] = useState<PeerRole>(null);
@@ -370,6 +378,7 @@ function App() {
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
   const [eventToast, setEventToast] = useState("");
+  const [decoyNotice, setDecoyNotice] = useState(false);
   const [achievementToast, setAchievementToast] = useState<AchievementDefinition | null>(null);
   const [xpBreakdown, setXpBreakdown] = useState<XpBreakdown | null>(null);
   const [stormPhase, setStormPhase] = useState<StormPhase>("clear");
@@ -392,6 +401,7 @@ function App() {
   const network = useRef<PeerGameClient | null>(null);
   const gameRef = useRef(game);
   const peerRoleRef = useRef<PeerRole>(null);
+  const roomCodeRef = useRef("");
   const opponentRef = useRef(opponent);
   const remoteBoardReadyRef = useRef<BoardState | null>(null);
   const localShieldRef = useRef(localShield);
@@ -402,8 +412,11 @@ function App() {
   const boardReturnTimer = useRef<number | null>(null);
   const copyNoticeTimer = useRef<number | null>(null);
   const eventToastTimer = useRef<number | null>(null);
+  const decoyNoticeTimer = useRef<number | null>(null);
   const lastEventToast = useRef<{ message: string; at: number }>({ message: "", at: 0 });
   const achievementToastTimer = useRef<number | null>(null);
+  const chatLogRef = useRef<HTMLDivElement | null>(null);
+  const intentionalCloseRef = useRef(false);
   const stormTimer = useRef<number | null>(null);
   const stormClearTimer = useRef<number | null>(null);
   const lastStormMove = useRef(-1);
@@ -452,6 +465,10 @@ function App() {
   }, [peerRole]);
 
   useEffect(() => {
+    roomCodeRef.current = roomCode;
+  }, [roomCode]);
+
+  useEffect(() => {
     if (matchMode !== "p2p" || peerRole !== "host" || game.phase !== "battle") {
       return;
     }
@@ -461,6 +478,13 @@ function App() {
   useEffect(() => {
     opponentRef.current = opponent;
   }, [opponent]);
+
+  useEffect(() => {
+    const node = chatLogRef.current;
+    if (node) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [socialMessages]);
 
   useEffect(() => {
     remoteBoardReadyRef.current = remoteBoardReady;
@@ -589,15 +613,28 @@ function App() {
     }, 2200);
   }
 
+  function showDecoyNotice(): void {
+    setDecoyNotice(true);
+    if (decoyNoticeTimer.current !== null) {
+      window.clearTimeout(decoyNoticeTimer.current);
+    }
+    decoyNoticeTimer.current = window.setTimeout(() => {
+      decoyNoticeTimer.current = null;
+      setDecoyNotice(false);
+    }, 1150);
+  }
+
   function appendSocialMessage(message: SocialMessage): void {
     setSocialMessages((current) => [...current, message].slice(-6));
   }
 
-  function sendReaction(reaction: (typeof reactions)[number]): void {
+  async function sendReaction(reaction: (typeof reactions)[number]): Promise<void> {
     if (matchMode !== "p2p" || !roomCode) {
       return;
     }
+    await audio.resume();
     audio.play(`react-${reaction.id}`, 0.7);
+    setReactionsOpen(false);
     const message: SocialMessage = { id: crypto.randomUUID(), from: "local", text: reaction.label, kind: "reaction" };
     appendSocialMessage(message);
     network.current?.send("reaction", { text: reaction.label, reaction: reaction.id });
@@ -739,6 +776,9 @@ function App() {
       if (eventToastTimer.current !== null) {
         window.clearTimeout(eventToastTimer.current);
       }
+      if (decoyNoticeTimer.current !== null) {
+        window.clearTimeout(decoyNoticeTimer.current);
+      }
       if (stormTimer.current !== null) {
         window.clearTimeout(stormTimer.current);
       }
@@ -770,9 +810,9 @@ function App() {
 
   useEffect(() => {
     if (matchMode === "p2p" && roomCode && network.current) {
-      network.current.send("identity", makeIdentity(profile, stats));
+      network.current.send("identity", identityForConnection(profile, stats, adminVerified));
     }
-  }, [matchMode, profile, roomCode, stats.losses, stats.prestige, stats.totalGames, stats.wins]);
+  }, [adminVerified, matchMode, profile, roomCode, stats.losses, stats.prestige, stats.totalGames, stats.wins]);
 
   useEffect(() => {
     const rank = getRankProgress(stats.xp);
@@ -1086,6 +1126,7 @@ function App() {
   }, [game.phase, game.remoteBoard, game.turn, localMultiBombShots]);
 
   const fireSelectedTarget = useCallback(() => {
+    void audio.resume();
     const targets = localMultiBombShots > 0 ? selectedTargets : selectedTarget ? [selectedTarget] : [];
     if (!targets.length || (localMultiBombShots > 0 && targets.length < localMultiBombShots)) {
       return;
@@ -1284,6 +1325,9 @@ function App() {
     setSelectedTarget(null);
     setSelectedTargets([]);
     showEventToast(anyHit ? "Multi-bomb hit!" : "Multi-bomb splashed.");
+    if (coords.length === 3 && totalHits === 3) {
+      unlockLocalAchievement("triple_tap");
+    }
     showBattleBoard(nextTurn === "local" && !winner ? "target" : "fleet", nextTurn === "remote" ? BOARD_RETURN_DELAY_MS : 0, nextTurn === "remote" ? BOARD_SWITCH_DELAY_MS : 0);
     setGameAfterImpact(nextState, game.turn);
     setStats((current) =>
@@ -1368,12 +1412,15 @@ function App() {
         showEventToast("Splash Zone armed. Your next hit splashes nearby water.");
       } else if (treasure === "decoy") {
         unlockLocalAchievement("decoy_found");
-        showEventToast("Decoy! The treasure was bait.");
+        showDecoyNotice();
       } else {
         unlockLocalAchievement("fake_treasure");
         showEventToast(`${chaos.message && !sameCoord(coord, finalCoord) ? `${chaos.message} ` : ""}Fake treasure! You got faked out.`);
       }
       const winner: PlayerSide | null = allShipsSunk(remoteBoard) ? "local" : null;
+      if (winner && treasure === "heat-missile") {
+        unlockLocalAchievement("full_send");
+      }
       const nextTurn: PlayerSide = winner || result === "hit" || result === "sunk" ? "local" : "remote";
       const state: GameState = {
         ...game,
@@ -1470,6 +1517,9 @@ function App() {
     );
     if (outcome.result === "hit" || outcome.result === "sunk") {
       unlockLocalAchievement("first_hit");
+      if (game.moves === 0) {
+        unlockLocalAchievement("cold_read");
+      }
       if (game.settings.modifiers.fogTide) {
         unlockLocalAchievement("fog_hit");
       }
@@ -1592,12 +1642,27 @@ function App() {
       if (state.settings.modifiers.stormMode && stats.achievements.storm_chaser) {
         unlockLocalAchievement("storm_rider");
       }
+      if (state.localBoard.ships.filter((ship) => !isShipSunk(ship)).length === 1 && state.localBoard.ships.some((ship) => ship.length === 1 && !isShipSunk(ship))) {
+        unlockLocalAchievement("last_plank_standing");
+      }
+      if (state.settings.modifiers.fogTide && state.settings.modifiers.stormMode) {
+        unlockLocalAchievement("perfect_storm");
+      }
+      if (state.settings.modifiers.pirateChaos && state.settings.modifiers.treasureTiles && state.settings.modifiers.stormMode) {
+        unlockLocalAchievement("chaos_crown");
+      }
+      if (audioMode === "muted") {
+        unlockLocalAchievement("silent_sea");
+      }
     }
     if (state.moves >= 40) {
       unlockLocalAchievement("long_battle");
     }
     if (state.moves > 75) {
       unlockLocalAchievement("long_voyage");
+    }
+    if (state.moves > 100) {
+      unlockLocalAchievement("patient_captain");
     }
     const modeLabels = matchModeLabels(state.settings);
     modeLabels.forEach((mode) => {
@@ -1625,6 +1690,7 @@ function App() {
   function leaveOrForfeit() {
     const current = gameRef.current;
     const forfeitingBattle = matchMode === "p2p" && current.phase === "battle";
+    intentionalCloseRef.current = true;
     network.current?.send("forfeit", { phase: current.phase });
     network.current?.close();
     network.current = null;
@@ -1660,6 +1726,7 @@ function App() {
     }
     const client = new PeerGameClient();
     network.current = client;
+    intentionalCloseRef.current = false;
     setMatchMode("p2p");
     setPeerRole("host");
     setOpponent(waitingIdentity);
@@ -1670,12 +1737,15 @@ function App() {
     bindPeerClient(client);
     client.onStatus((status) => {
       setNetworkStatus(formatNetworkStatus(status));
+      if (status === "closed" && !intentionalCloseRef.current && roomCodeRef.current) {
+        showEventToast("Admin closed your game.");
+      }
       if (status === "P2P data channel open") {
-        client.send("identity", makeIdentity(profile, stats));
+        client.send("identity", identityForConnection(profile, stats, adminVerified));
         client.send("settings", gameRef.current.settings);
       }
     });
-    const code = await client.createRoom(makeIdentity(profile, stats));
+    const code = await client.createRoom(identityForConnection(profile, stats, adminVerified));
     setRoomCode(code);
     setNetworkStatus(`Room ${code} ready. Waiting for opponent...`);
     void pingPresence(getPresenceSessionId());
@@ -1731,6 +1801,7 @@ function App() {
     }
     const client = new PeerGameClient();
     network.current = client;
+    intentionalCloseRef.current = false;
     setMatchMode("p2p");
     setPeerRole("guest");
     setOpponent(waitingIdentity);
@@ -1742,12 +1813,15 @@ function App() {
     bindPeerClient(client);
     client.onStatus((status) => {
       setNetworkStatus(formatNetworkStatus(status));
+      if (status === "closed" && !intentionalCloseRef.current && roomCodeRef.current) {
+        showEventToast("Admin closed your game.");
+      }
       if (status === "P2P data channel open") {
-        client.send("identity", makeIdentity(profile, stats));
+        client.send("identity", identityForConnection(profile, stats, adminVerified));
       }
     });
     setJoinCode(codeToJoin);
-    await client.joinRoom(codeToJoin, makeIdentity(profile, stats));
+    await client.joinRoom(codeToJoin, identityForConnection(profile, stats, adminVerified));
     setRoomCode(codeToJoin);
     setActiveTab("play");
   }
@@ -1993,7 +2067,7 @@ function App() {
         setRemoteSplashZones((value) => value + 1);
         showEventToast(`${opponent.displayName} armed a Splash Zone.`);
       } else if (treasure === "decoy") {
-        showEventToast(`${opponent.displayName} hit a decoy.`);
+        showDecoyNotice();
       }
       playAttackVisual("local", coord, "miss", OPPONENT_SOUND_VOLUME);
       playShotResultSound("miss", OPPONENT_SOUND_VOLUME);
@@ -2205,7 +2279,7 @@ function App() {
       showEventToast("Splash Zone armed. Your next hit splashes nearby water.");
     } else if (payload.treasureKind === "decoy") {
       unlockLocalAchievement("decoy_found");
-      showEventToast("Decoy! The treasure was bait.");
+      showDecoyNotice();
     } else if (payload.treasureKind === "fake") {
       showEventToast("Fake treasure! You got faked out.");
     } else if (payload.result === "shielded") {
@@ -2307,7 +2381,8 @@ function App() {
             }}
           >
             <UserRound size={18} />
-            {profile.displayName}
+            <span>{profile.displayName}</span>
+            {adminVerified && <em className="dev-badge">DEV</em>}
           </button>
         </div>
       </header>
@@ -2333,7 +2408,7 @@ function App() {
       </nav>
 
       {activeTab === "play" && (
-        <div className={matchActive ? "content-grid battle-grid" : "content-grid setup-focus"}>
+        <div className={matchActive ? "content-grid battle-grid" : `content-grid setup-focus${placementBoardExpanded ? " waters-open" : " waters-collapsed"}`}>
           {game.phase !== "battle" && game.phase !== "victory" && game.phase !== "defeat" && (
             <SetupPanel
               settings={game.settings}
@@ -2447,7 +2522,7 @@ function App() {
               <section className="battle-status">
                 <div className="battle-player battle-player-local">
                   <small>{peerRole === "guest" ? "Guest" : "Host"}</small>
-                  <strong className={localPrestigeClass}>{profile.displayName}</strong>
+                  <strong className={localPrestigeClass}>{profile.displayName}{adminVerified && <em className="dev-badge">DEV</em>}</strong>
                 </div>
                 <div className="battle-turn">
                   <small>Turn</small>
@@ -2455,7 +2530,7 @@ function App() {
                 </div>
                 <div className="battle-player battle-player-remote">
                   <small>{peerRole === "guest" ? "Host" : "Enemy"}</small>
-                  <strong className={opponentPrestigeClass}>{opponent.displayName}</strong>
+                  <strong className={opponentPrestigeClass}>{opponent.displayName}{opponent.developer && <em className="dev-badge">DEV</em>}</strong>
                 </div>
                 {game.settings.blitz.enabled && <div className="timer">{Math.ceil(clock)}</div>}
                 <button className="icon-button stats-match-button" type="button" onClick={() => setShowOpponentStats((value) => !value)} title="Opponent stats">
@@ -2519,7 +2594,7 @@ function App() {
                   style={{ "--lead-scale": crownScale } as React.CSSProperties}
                 >
                   <div className="fleet-count fleet-count-local">
-                    <strong className={localPrestigeClass}>{profile.displayName}</strong>
+                    <strong className={localPrestigeClass}>{profile.displayName}{adminVerified && <em className="dev-badge">DEV</em>}</strong>
                     <small>{localShipsLeft}</small>
                   </div>
                   <div className="lead-crown">
@@ -2527,7 +2602,7 @@ function App() {
                     <strong className={leadingSide === "local" ? localPrestigeClass : leadingSide === "remote" ? opponentPrestigeClass : undefined}>{battleLeadLabel}</strong>
                   </div>
                   <div className="fleet-count fleet-count-remote">
-                    <strong className={opponentPrestigeClass}>{opponent.displayName}</strong>
+                    <strong className={opponentPrestigeClass}>{opponent.displayName}{opponent.developer && <em className="dev-badge">DEV</em>}</strong>
                     <small>{enemyShipsLeft}</small>
                   </div>
                 </div>
@@ -2577,15 +2652,28 @@ function App() {
                 </section>
                 {matchMode === "p2p" && roomCode && (
                   <section className="battle-social-panel">
-                    <div className="reaction-row" aria-label="Quick reactions">
-                      {reactions.map((reaction) => (
-                        <button className="reaction-button" type="button" key={reaction.id} onClick={() => sendReaction(reaction)} title={reaction.label} aria-label={reaction.label}>
-                          <span aria-hidden="true">{reaction.emoji}</span>
-                        </button>
-                      ))}
+                    <div className={reactionsOpen ? "reaction-picker open" : "reaction-picker"} aria-label="Quick reactions">
+                      <button
+                        className="reaction-toggle"
+                        type="button"
+                        onClick={() => setReactionsOpen((value) => !value)}
+                        aria-expanded={reactionsOpen}
+                        title="Quick reactions"
+                      >
+                        🙂
+                      </button>
+                      {reactionsOpen && (
+                        <div className="reaction-row">
+                          {reactions.map((reaction) => (
+                            <button className="reaction-button" type="button" key={reaction.id} onClick={() => void sendReaction(reaction)} title={reaction.label} aria-label={reaction.label}>
+                              <span aria-hidden="true">{reaction.emoji}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="chat-stack">
-                      <div className="chat-log" aria-live="polite">
+                      <div className="chat-log" aria-live="polite" ref={chatLogRef}>
                         {socialMessages.length ? (
                           socialMessages.map((message) => (
                             <span className={message.from === "local" ? "local" : "remote"} key={message.id}>
@@ -2628,6 +2716,9 @@ function App() {
                       <button className="primary" type="button" onClick={rematch}>Rematch</button>
                     ) : (
                       <p>Waiting for host to start a rematch…</p>
+                    )}
+                    {matchMode === "p2p" && (
+                      <button className="secondary" type="button" onClick={leaveOrForfeit}>Leave lobby</button>
                     )}
                   </section>
                 )}
@@ -2783,6 +2874,12 @@ function App() {
       )}
       {copyNotice && <div className="copy-toast" role="status">{copyNotice}</div>}
       {eventToast && <div className="event-toast" role="status">{eventToast}</div>}
+      {decoyNotice && (
+        <div className="decoy-pop" role="status">
+          <span aria-hidden="true">🤡</span>
+          <strong>Decoy!</strong>
+        </div>
+      )}
       {achievementToast && (
         <div className="achievement-toast" role="status">
           <Trophy size={20} />

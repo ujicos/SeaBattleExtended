@@ -174,7 +174,7 @@ export function markShieldedShot(board: BoardState, coord: Coordinate): BoardSta
 
 export function repairOneDamagedShipCell(board: BoardState): { board: BoardState; repaired: boolean } {
   const candidates = board.ships
-    .filter((ship) => ship.hits.length > 0 && !isShipSunk(ship))
+    .filter((ship) => ship.length > 1 && ship.hits.length > 0 && !isShipSunk(ship))
     .flatMap((ship) => ship.hits.map((hit) => ({ ship, hit })));
 
   if (!candidates.length) {

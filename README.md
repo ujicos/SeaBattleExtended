@@ -1,137 +1,87 @@
 # Sea Battle Extended
 
-A mobile-first React/TypeScript web implementation of a classic Sea Battle MVP.
+Mobile-first React/TypeScript Sea Battle with local practice, WebRTC P2P rooms, Cloudflare Worker signaling, modifiers, treasures, achievements, XP, prestige, stats, admin tools, and GitHub Pages hosting.
 
-## Run
+## Quick Start
 
 ```bash
 npm install
 npm run dev
 ```
 
-For local Node WebRTC room signaling in another terminal:
+Open the Vite URL, usually:
 
-```bash
-npm run signal
+```text
+http://localhost:5173
 ```
 
-Then open the Vite URL, normally `http://localhost:5173`.
+Production frontend hosting can live on GitHub Pages because the app is static. Online P2P still needs the Cloudflare Worker WebSocket signaling endpoint.
+
+## GitHub Pages
+
+The Vite app is configured for:
+
+```text
+/SeaBattleExtended/
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Publish `dist` through GitHub Pages or your existing GitHub workflow.
+
+Use this build-time signaling URL:
+
+```bash
+VITE_SIGNALING_URL=wss://seabattle-extended.yohabbodude.workers.dev npm run build
+```
 
 ## Cloudflare Worker Signaling
 
-The production signaling service lives in `worker/signaling.ts` and uses one Durable Object per room. This is the piece GitHub Pages cannot run by itself.
+The Worker lives in:
 
-Your Worker URL is:
+```text
+worker/signaling.ts
+```
+
+It handles:
+
+- P2P room signaling.
+- Lobby listing and presence counts.
+- Admin lobby controls.
+- D1 global leaderboard API.
+
+Worker URL:
 
 ```text
 https://seabattle-extended.yohabbodude.workers.dev
 ```
 
-Opening that URL in a normal browser page is only a health check. The game connects to the same endpoint as a WebSocket:
+The browser game connects as WebSocket:
 
 ```text
 wss://seabattle-extended.yohabbodude.workers.dev/?room=ABC123&role=host
 ```
 
-Install and log in:
-
-```bash
-npm install
-npx wrangler login
-```
-
-If Wrangler cannot open a browser login from the current terminal, create a Cloudflare API token and expose it before deploying:
-
-```bash
-export CLOUDFLARE_API_TOKEN="your-token"
-```
-
-The token needs permission to edit Workers Scripts and Durable Objects on the account that owns `yohabbodude.workers.dev`.
-
-Test the Worker locally:
-
-```bash
-npm run worker:dev
-```
-
-In another terminal, point the frontend at that local Worker:
-
-```bash
-VITE_SIGNALING_URL=ws://localhost:8787 npm run dev
-```
-
-Deploy the Worker:
+Deploy:
 
 ```bash
 npm run worker:deploy
 ```
 
-Wrangler will print a URL like:
-
-```text
-https://sea-battle-signaling.YOUR_SUBDOMAIN.workers.dev
-```
-
-Use the WebSocket version in `.env.local`:
+Local Worker test:
 
 ```bash
-VITE_SIGNALING_URL=wss://sea-battle-signaling.YOUR_SUBDOMAIN.workers.dev
+npm run worker:dev
+VITE_SIGNALING_URL=ws://localhost:8787 npm run dev
 ```
 
-For this project, use:
+## Cloudflare Bindings
 
-```bash
-VITE_SIGNALING_URL=wss://seabattle-extended.yohabbodude.workers.dev
-```
-
-Then build the frontend:
-
-```bash
-npm run build
-```
-
-### GitHub Actions Worker Deploy
-
-This repo includes `.github/workflows/worker.yml`. To let GitHub deploy the Worker on commit:
-
-1. In GitHub, open repo Settings -> Secrets and variables -> Actions.
-2. Add `CLOUDFLARE_API_TOKEN`.
-3. Add `CLOUDFLARE_ACCOUNT_ID`.
-4. Push changes to `main`, or run the workflow manually.
-
-The frontend build workflow also bakes in:
-
-```text
-VITE_SIGNALING_URL=wss://seabattle-extended.yohabbodude.workers.dev
-```
-
-## GitHub Pages
-
-The Vite app is configured with `base: "/SeaBattleExtended/"`, so the static build works from a repository Pages URL such as:
-
-```text
-https://YOUR_USERNAME.github.io/SeaBattleExtended/
-```
-
-Build with:
-
-```bash
-npm run build
-```
-
-Publish the generated `dist` folder with your preferred GitHub Pages workflow.
-
-Important: GitHub Pages cannot run WebSocket signaling. The game UI and local practice mode work as static Pages content, but online P2P rooms need the Cloudflare Worker `wss://` signaling endpoint. Set it at build time:
-
-```bash
-VITE_SIGNALING_URL=wss://your-signaling-host.example npm run build
-```
-
-## Admin Access
-
-Admin actions are protected by the Cloudflare Worker secret named `ADMIN_TOKEN`. Do not put the token in GitHub Pages secrets, Vite env variables, or source files. Add or rotate it in Cloudflare Worker settings as a secret, then deploy the Worker.
-
-The D1 leaderboard database is bound in `wrangler.toml` as:
+D1 leaderboard binding in `wrangler.toml`:
 
 ```toml
 [[d1_databases]]
@@ -140,67 +90,217 @@ database_name = "seabattleextended_leaderboard"
 database_id = "91f0e247-d4be-4cd8-baea-b06033aaf9fd"
 ```
 
-To use admin controls:
+Worker secret:
 
-1. Open the site and go to `Profile`.
-2. Paste your current `ADMIN_TOKEN` into `Developer admin`.
-3. Click `Verify`.
+```text
+ADMIN_TOKEN
+```
 
-The admin panel can view online/game counts, close a room from the lobby registry/signaling room, clear open lobby listings, and reset the global D1 leaderboard. Closing a room can disconnect players that are still using Worker signaling; an already-established WebRTC data channel is direct browser-to-browser, so true mid-match kicking would require relaying gameplay through Cloudflare instead of P2P.
+Do not put `ADMIN_TOKEN` in frontend env files, source code, GitHub Pages, or Vite variables.
 
-## Implemented
+## Admin Tools
 
-- Configurable board presets with scaled fleets: 8x8, 9x9, 10x10, 12x12, 14x14, 16x16, and Large Battle 20x20.
-- Rule engine with horizontal/vertical ships, no overlap, and a one-cell buffer including diagonals.
-- Classic combat: miss ends turn, hit/sunk keeps turn, all ships sunk wins.
-- Touch/mouse ship placement, rotate, hover preview, and repeatable shuffle.
-- Local practice battle against a generated opponent fleet.
-- Blitz mode options with 5/10/15/30 second timers and configurable timeout behavior.
-- Local player profile, persistent player ID, avatar token, stats, opponent history, match history.
-- Profile export/import through JSON.
-- WebRTC data-channel client, local Node signaling server, and Cloudflare Worker Durable Object signaling for hosted room codes.
-- Asset manager and audio manager with stable public drop-in paths.
-- Responsive mobile-first UI using CSS, no frame-locked animation loop.
+Open `Profile`, paste the current `ADMIN_TOKEN`, then click `Verify`.
 
-## Game Modifiers
+Admin tools can:
 
-Modifiers are optional pre-game rules selected from the setup panel before practice or P2P play.
+- Verify Worker admin access.
+- Remember or forget the token locally.
+- View Worker online/game/leaderboard counts.
+- Close open or full lobbies.
+- Clear lobby listings.
+- Reset the global leaderboard.
+- Use debug match tools such as Tactical Nuke.
+- Preview prestige name effects without changing real rank, XP, or prestige.
+- Reveal hidden achievements for preview.
 
-- `Fog Tide`: adds a very low-opacity animated fog layer over the target board. It follows the current wind indicator shown in the board header. It is visual pressure only; your selected square is still the square you fire at.
-- `Storm Mode`: every 18 total moves, `storm_warn.mp3` plays once 10 seconds before a storm wave hits. At impact, `storm_wave.mp3` plays and the storm may nudge one fully unhit ship by one square if normal placement rules still allow it. In P2P, moved boards are synced after the wave.
-- `Treasure Tiles`: hidden treasure can appear on water tiles. Hitting real treasure grants a one-hit shield. The shield blocks the next shot that would successfully hit one of your ships, consumes the shield, and lets that same square be fired at again later.
-- `Multi-bomb Treasure`: rare treasure with a 3.33% board-spawn chance, about 1 in 30 generated boards. When found, it arms one attack where you select 3 legal target squares anywhere on the target board before pressing Fire. They do not need to be connected or in a row. Disabled squares, already resolved shots, and blocked sunk-ship buffer squares cannot be selected. The hit/miss results are not revealed until Fire is clicked.
-- `Heat-seeking Missile Treasure`: super rare treasure with a 1% board-spawn chance, about 1 in 100 generated boards. When found, it attempts to hit one random un-sunk enemy ship. Larger ships are weighted much higher than smaller ships; if only small ships remain, the missile can still hit but has a fair miss chance.
-- `Pirate Chaos`: adds rare cursed cannonballs and fake treasure. Cursed cannonballs have a 6% chance on eligible shots, about 1 in 17 shots, to curve to a valid neighboring square without preview; after firing, a toast says `Curveball!`. Fake treasure reveals itself after firing and grants no reward.
+Developer identity is sent over P2P while verified as admin, so other players can see a `DEV` badge even if your display name does not include `dev`.
 
-### Modifier Odds
+## Gameplay
 
-- Treasure shield tiles: 1 hidden shield tile on 8x8 through 20x20 boards while Treasure Tiles is enabled.
-- Multi-bomb treasure: 3.33% chance per generated board, about 1 in 30.
-- Heat-seeking missile treasure: 1% chance per generated board, about 1 in 100.
-- Fake treasure: 1 hidden fake tile on 8x8 through 20x20 boards while Pirate Chaos is enabled.
-- Curveball: 6% chance per eligible Pirate Chaos shot, about 1 in 17.
-- Storm wave: every 18 total moves while Storm Mode is enabled.
+- Board presets: Classic 8x8, 9x9, 10x10, Extended 12x12, 14x14, 16x16, and Large Battle 20x20.
+- Ships are horizontal or vertical only.
+- Ships cannot overlap or touch, including diagonals.
+- The board starts randomized; you can rotate or shuffle before readying.
+- Hits keep your turn.
+- Misses pass the turn.
+- Sinking all enemy ships wins.
+- Sunk ships disable their surrounding buffer area.
+- P2P rooms have share codes and share links.
+- Host controls match settings; guest can view them.
+- Chat and quick reactions are available in P2P matches.
+
+## Modifiers
+
+Modifiers are selected before the game starts.
+
+### Blitz Mode
+
+Adds a turn timer with configurable timeout behavior.
+
+### Fog Tide
+
+Adds a lightweight animated fog layer over the target board. It follows the current wind indicator and is visual pressure only.
+
+### Storm Mode
+
+Every 18 total moves, a warning plays 10 seconds before a storm wave. At impact, the storm may nudge one fully unhit ship by one square if placement rules allow it. P2P boards sync after storm movement.
+
+### Treasure Tiles
+
+Adds hidden treasure on water tiles.
+
+Treasure types:
+
+- `Shield`: arms a one-hit shield. The next successful hit against your fleet is blocked.
+- `Multi-bomb`: rare. Select 3 legal target squares anywhere on the board before firing.
+- `Heat-seeking Missile`: super rare. Attempts to hit a random unsunk enemy ship, weighted toward larger ships.
+- `Repair Kit`: rare. Repairs one damaged unsunk ship segment. It cannot repair 1x1 ships.
+- `Splash Zone`: rare. Your next successful normal hit marks nearby water around the impact.
+
+### Pirate Chaos
+
+Adds fakeouts and cursed shots.
+
+Effects:
+
+- `Fake Treasure`: looks like treasure but grants nothing.
+- `Decoy`: rare. Shows a quick clown popup with `Decoy!`.
+- `Curveball`: cursed cannonball may randomly curve to a neighboring valid square without preview.
+
+## Modifier Odds
+
+Per generated board:
+
+- Shield treasure: 1 tile while Treasure Tiles is enabled.
+- Multi-bomb: 3.33%, about 1 in 30.
+- Heat-seeking missile: 1%, about 1 in 100.
+- Repair Kit: about 4.55%, 1 in 22.
+- Splash Zone: 4%, 1 in 25.
+- Fake treasure: 1 tile while Pirate Chaos is enabled.
+- Decoy: about 2.22%, 1 in 45.
+
+Per eligible Pirate Chaos shot:
+
+- Curveball: 6%, about 1 in 17.
+
+Storm:
+
+- Wave cycle: every 18 total moves.
+
+## XP, Rank, Prestige
+
+- XP is earned from shots, hits, sunk ships, wins, and losses.
+- Rank max is 55.
+- At max rank, you can prestige from the Stats page.
+- Prestige resets rank XP but keeps lifetime XP.
+- Prestige adds name effects.
+- Prestige effects sync across P2P identities.
+- Admins can preview prestige effects without changing real stats.
+
+## Achievements
+
+Achievements include visible and hidden goals across combat, modifiers, treasures, XP progression, and long-term play.
+
+Examples:
+
+- First Blood
+- Shipbreaker
+- Captain's Mark
+- Clock Captain
+- Old Salt
+- Speed Demon
+- Fog Dweller
+- Stormborn Captain
+- Treasure Hunter
+- Chaos Regular
+- Untouched Fleet
+- Through the Fog
+- Storm Chaser
+- Buried Booty
+- Fool's Gold
+- Lucky Charm
+- Patch Job
+- Splash Zone
+- Baited
+- Triple Tap
+- Full Send
+- Close Call
+- Tiny Terror
+- Silent Sea
+- Perfect Storm
+- Chaos Crown
+
+Admin-only debug actions do not grant unfair achievements.
+
+## Stats, Import, Export, Leaderboards
+
+Local stats include:
+
+- Games, wins, losses.
+- Shots, hits, accuracy.
+- Ships sunk.
+- XP, lifetime XP, rank, prestige.
+- Achievements.
+- Opponent records.
+- Match history.
+
+Profile export/import is JSON and includes all local stats, achievements, XP, prestige, opponents, and history.
+
+Global leaderboard uses Cloudflare D1. Names containing `dev` are hidden from public leaderboard views and are skipped from new public leaderboard submissions. Admins can view hidden developer rows with a red `DEV` marker.
+
+## Audio
+
+Audio uses bundled assets from `src/assets/audio` and public drop-in paths for optional replacements.
+
+Important files:
+
+- `theme.mp3`
+- `bomber_flyby.mp3`
+- `whizz_hit.mp3`
+- `explode.mp3`
+- `water_miss.mp3`
+- `victory.mp3`
+- `defeat.mp3`
+- `storm_warn.mp3`
+- `storm_wave.mp3`
+- `react_laugh.mp3`
+- `react_confused.mp3`
+- `react_think.mp3`
+- `react_angry.mp3`
+
+The audio manager uses ambient device audio where supported, resumes on user interaction/focus, and lets players mute music only or all sound.
 
 ## Asset Paths
 
-Drop your files into:
+Drop-in folders:
 
-- `public/assets/audio`
-- `public/assets/textures`
-- `public/assets/sprites`
+```text
+public/assets/audio
+public/assets/textures
+public/assets/sprites
+```
 
-The manifest is in `src/services/assets.ts`. Replace or extend keys there to map game events to your files.
+Bundled source assets:
 
-Reaction audio keys currently use `react_laugh.mp3`, `react_confused.mp3`, `react_think.mp3`, and a drop-in `public/assets/audio/react_angry.mp3` path until an imported source asset is added for angry.
+```text
+src/assets/audio
+```
+
+Manifest:
+
+```text
+src/services/assets.ts
+```
 
 ## Architecture
 
-- `src/game` contains board config, placement rules, combat engine, and animation timing helpers.
-- `src/services` contains storage, assets, audio, and WebRTC networking.
-- `src/components` contains reusable UI panels and the board renderer.
-- `server/signaling.ts` is intentionally minimal and stores no permanent game data.
+- `src/game`: board config, placement, treasure seeding, combat helpers.
+- `src/services`: storage, assets, audio, networking, version.
+- `src/components`: board and UI panels.
+- `worker/signaling.ts`: Cloudflare Worker and Durable Object signaling.
+- `server/signaling.ts`: local Node signaling fallback.
 
 ## Notes
 
-The current gameplay MVP is fully playable locally. The P2P layer establishes rooms and a WebRTC data channel with identity exchange; GitHub Pages deployment requires the Cloudflare Worker signaling URL because Pages is static-only hosting.
+GitHub Pages hosts the frontend. Cloudflare Worker handles online rooms, presence, lobby listings, admin routes, and leaderboard API. The live match data channel is P2P after WebRTC connects.
