@@ -91,6 +91,12 @@ export const achievements: AchievementDefinition[] = [
   { id: "first_sink", title: "Shipbreaker", description: "Sink your first ship." },
   { id: "first_win", title: "Captain's Mark", description: "Win your first match." },
   { id: "blitz_win", title: "Clock Captain", description: "Win with Blitz Mode enabled." },
+  { id: "classic_century", title: "Old Salt", description: "Play 100 Classic matches." },
+  { id: "blitz_century", title: "Speed Demon", description: "Play 100 Blitz Mode matches." },
+  { id: "fog_century", title: "Fog Dweller", description: "Play 100 Fog Tide matches." },
+  { id: "storm_century", title: "Stormborn Captain", description: "Play 100 Storm Mode matches." },
+  { id: "treasure_century", title: "Treasure Hunter", description: "Play 100 Treasure Tiles matches." },
+  { id: "chaos_century", title: "Chaos Regular", description: "Play 100 Pirate Chaos matches." },
   { id: "flawless_fleet", title: "Untouched Fleet", description: "Win before losing any ships.", hidden: true },
   { id: "fog_hit", title: "Through the Fog", description: "Hit a ship during Fog Tide.", hidden: true },
   { id: "storm_chaser", title: "Storm Chaser", description: "Have a ship moved by Storm Mode.", hidden: true },
@@ -102,7 +108,6 @@ export const achievements: AchievementDefinition[] = [
   { id: "big_board_win", title: "Big Sea Captain", description: "Win on a 16x16 or larger board." },
   { id: "perfect_accuracy", title: "No Splash Zone", description: "Win a match without missing.", hidden: true },
   { id: "ten_wins", title: "Fleet Veteran", description: "Win 10 matches." },
-  { id: "admin_nuke", title: "Unfair Seas", description: "Use the admin nuke.", hidden: true },
   { id: "long_battle", title: "Sea Marathon", description: "Finish a match with at least 40 moves." },
   { id: "prestige_1", title: "Prestige Captain", description: "Prestige for the first time.", hidden: true }
 ];
@@ -225,6 +230,10 @@ export function saveProfile(profile: PlayerProfile): void {
 
 export function loadStats(): PlayerStats {
   const loaded = safeParse<Partial<PlayerStats>>(localStorage.getItem(statsKey), defaultStats);
+  return normalizeStats(loaded);
+}
+
+export function normalizeStats(loaded: Partial<PlayerStats>): PlayerStats {
   return {
     ...defaultStats,
     ...loaded,
@@ -343,7 +352,9 @@ export function importProfile(raw: string): ExportBundle {
   if (!bundle.profile?.playerId || !bundle.stats) {
     throw new Error("Invalid profile export");
   }
+  const normalizedStats = normalizeStats(bundle.stats);
+  const normalizedBundle = { ...bundle, stats: normalizedStats };
   saveProfile(bundle.profile);
-  saveStats(bundle.stats);
-  return bundle;
+  saveStats(normalizedStats);
+  return normalizedBundle;
 }

@@ -112,13 +112,19 @@ export function StatsPanel({
           <small>{visibleGlobalLeaderboard.length ? `Page ${leaderboardPage + 1}/${leaderboardPageCount}` : "D1"}</small>
         </div>
         {visibleGlobalLeaderboard.length ? (
-          leaderboardPlayers.map((player, index) => (
-            <div className="leaderboard-row" key={player.playerId}>
-              <span>#{leaderboardStart + index + 1} {player.displayName}</span>
-              <strong>P{player.prestige} R{player.rank}</strong>
-              <small>{player.lifetimeXp} XP</small>
-            </div>
-          ))
+          leaderboardPlayers.map((player, index) => {
+            const hiddenDeveloper = isHiddenLeaderboardName(player.displayName);
+            const prestigeClass = player.prestige ? `prestige-name prestige-${Math.min(10, player.prestige)}` : undefined;
+            return (
+              <div className={hiddenDeveloper ? "leaderboard-row developer-row" : "leaderboard-row"} key={player.playerId}>
+                <span className={prestigeClass}>
+                  #{leaderboardStart + index + 1} {player.displayName}{hiddenDeveloper ? <em>DEV</em> : null}
+                </span>
+                <strong>P{player.prestige} R{player.rank}</strong>
+                <small>{player.lifetimeXp} XP</small>
+              </div>
+            );
+          })
         ) : (
           <div className="leaderboard-row">
             <span>No global ranks yet</span>

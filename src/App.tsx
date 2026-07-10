@@ -75,6 +75,46 @@ function makeShareLink(roomCode: string): string {
   return url.toString();
 }
 
+function prestigeNameClass(prestige: number): string {
+  return prestige > 0 ? `prestige-name prestige-${Math.min(10, prestige)}` : "";
+}
+
+function matchModeLabels(settings: GameSettings): string[] {
+  const labels = [settings.blitz.enabled ? "Blitz" : "Classic"];
+  if (settings.modifiers.fogTide) {
+    labels.push("Fog Tide");
+  }
+  if (settings.modifiers.stormMode) {
+    labels.push("Storm Mode");
+  }
+  if (settings.modifiers.treasureTiles) {
+    labels.push("Treasure Tiles");
+  }
+  if (settings.modifiers.pirateChaos) {
+    labels.push("Pirate Chaos");
+  }
+  return labels;
+}
+
+function modeCenturyAchievementId(mode: string): string | null {
+  switch (mode) {
+    case "Classic":
+      return "classic_century";
+    case "Blitz":
+      return "blitz_century";
+    case "Fog Tide":
+      return "fog_century";
+    case "Storm Mode":
+      return "storm_century";
+    case "Treasure Tiles":
+      return "treasure_century";
+    case "Pirate Chaos":
+      return "chaos_century";
+    default:
+      return null;
+  }
+}
+
 function pickOpenShot(board: BoardState): Coordinate | null {
   const totalCells = board.size * board.size;
   let picked: Coordinate | null = null;
@@ -380,6 +420,7 @@ function App() {
   const battleLeadLabel = leadingSide === "local" ? profile.displayName : leadingSide === "remote" ? opponent.displayName : "tied";
   const leadDifference = Math.abs(enemyShipsSunk - localShipsSunk);
   const crownScale = leadingSide === "remote" ? 0.88 : leadingSide === "local" ? 1 + Math.min(leadDifference, 8) * 0.045 : 1;
+  const localPrestigeClass = prestigeNameClass(stats.prestige);
   const preview = useMemo(
     () =>
       hovered && selectedShip && game.phase === "placing"
@@ -646,8 +687,10 @@ function App() {
       setOpenLobbies(status.lobbies);
     }
 
+    const refreshMs = activeTab === "lobby" || Boolean(roomCode) ? 12000 : 30000;
+    const jitterMs = Math.round(Math.random() * 1600);
     void updatePresence();
-    const interval = window.setInterval(() => void updatePresence(), 20000);
+    const interval = window.setInterval(() => void updatePresence(), refreshMs + jitterMs);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         void updatePresence();
@@ -664,7 +707,7 @@ function App() {
       window.removeEventListener("pagehide", handleUnload);
       leavePresence(sessionId);
     };
-  }, [adminToken, adminVerified]);
+  }, [activeTab, adminToken, adminVerified, roomCode]);
 
   useEffect(() => {
     return () => {
@@ -1468,6 +1511,14 @@ function App() {
     if (state.moves >= 40) {
       unlockLocalAchievement("long_battle");
     }
+    const modeLabels = matchModeLabels(state.settings);
+    modeLabels.forEach((mode) => {
+      const achievementId = modeCenturyAchievementId(mode);
+      const previousPlays = stats.history.filter((entry) => entry.mode.split(", ").includes(mode)).length;
+      if (achievementId && previousPlays + 1 >= 100) {
+        unlockLocalAchievement(achievementId);
+      }
+    });
     const durationMs = Math.round((state.endedAt ?? performance.now()) - (state.startedAt ?? performance.now()));
     setStats((current) =>
       recordMatch(current, {
@@ -1475,7 +1526,7 @@ function App() {
         date: new Date().toISOString(),
         opponent,
         boardSize: config.size,
-        mode: state.settings.blitz.enabled ? "Blitz" : "Classic",
+        mode: modeLabels.join(", "),
         result,
         moves: state.moves,
         durationMs
@@ -1539,6 +1590,7 @@ function App() {
     const code = await client.createRoom(makeIdentity(profile, stats));
     setRoomCode(code);
     setNetworkStatus(`Room ${code} ready. Waiting for opponent...`);
+    void pingPresence(getPresenceSessionId());
     void refreshOpenLobbies();
     updateSettings(game.settings);
     setActiveTab("play");
@@ -1819,7 +1871,6 @@ function App() {
       log: ["ADMIN called a Tactical Nuke!", ...game.log].slice(0, 30)
     };
     network.current?.send("admin-nuke", { noStats: true });
-    unlockLocalAchievement("admin_nuke");
     setGame(nextState);
     showEventToast("ADMIN called a Tactical Nuke! Stats declined.");
     endMatch("win", nextState);
@@ -2128,7 +2179,7 @@ function App() {
             <small>{presenceStatus.activeGames} games</small>
           </div>
           <button
-            className="player-chip"
+            className={`player-chip ${localPrestigeClass}`}
             type="button"
             title="Open profile"
             onClick={() => {
@@ -2276,7 +2327,7 @@ function App() {
               <section className="battle-status">
                 <div className="battle-player battle-player-local">
                   <small>{peerRole === "guest" ? "Guest" : "Host"}</small>
-                  <strong>{profile.displayName}</strong>
+                  <strong className={localPrestigeClass}>{profile.displayName}</strong>
                 </div>
                 <div className="battle-turn">
                   <small>Turn</small>
@@ -2348,7 +2399,7 @@ function App() {
                   style={{ "--lead-scale": crownScale } as React.CSSProperties}
                 >
                   <div className="fleet-count fleet-count-local">
-                    <strong>{profile.displayName}</strong>
+                    <strong className={localPrestigeClass}>{profile.displayName}</strong>
                     <small>{localShipsLeft}</small>
                   </div>
                   <div className="lead-crown">

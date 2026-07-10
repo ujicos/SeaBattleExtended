@@ -227,6 +227,28 @@ small,
   transform: scale(0.97);
 }
 
+.prestige-name {
+  --prestige-color: #f6b35b;
+  --prestige-shadow: rgba(246, 132, 55, 0.28);
+  color: var(--prestige-color);
+  text-shadow: 0 0 8px var(--prestige-shadow);
+}
+
+.prestige-1 { --prestige-color: #ffc07a; --prestige-shadow: rgba(255, 122, 46, 0.32); }
+.prestige-2 { --prestige-color: #ff9d75; --prestige-shadow: rgba(255, 89, 64, 0.38); }
+.prestige-3 { --prestige-color: #f4d06f; --prestige-shadow: rgba(242, 198, 109, 0.42); }
+.prestige-4 { --prestige-color: #9fe9df; --prestige-shadow: rgba(72, 208, 187, 0.42); }
+.prestige-5 { --prestige-color: #9dc9ff; --prestige-shadow: rgba(92, 156, 255, 0.44); }
+.prestige-6 { --prestige-color: #c7a7ff; --prestige-shadow: rgba(162, 112, 255, 0.46); }
+.prestige-7 { --prestige-color: #ff9fd0; --prestige-shadow: rgba(255, 92, 171, 0.48); }
+.prestige-8 { --prestige-color: #fff0a6; --prestige-shadow: rgba(255, 216, 88, 0.52); }
+.prestige-9 { --prestige-color: #ffffff; --prestige-shadow: rgba(159, 233, 223, 0.58); }
+.prestige-10 {
+  --prestige-color: #fff5da;
+  --prestige-shadow: rgba(255, 105, 38, 0.68);
+  animation: prestige-fire 2400ms ease-in-out infinite;
+}
+
 .tabbar {
   position: sticky;
   top: max(8px, calc(env(safe-area-inset-top) + 8px));
@@ -475,21 +497,25 @@ select {
   min-height: 48px;
 }
 
-.toggle input {
+.toggle input,
+.toggle-card input {
   width: 22px;
+  height: 22px;
   min-height: 22px;
   appearance: none;
   -webkit-appearance: none;
   display: grid;
   place-items: center;
   flex: 0 0 22px;
+  margin: 0;
   border: 1px solid rgba(210, 236, 232, 0.58);
   border-radius: 4px;
   padding: 0;
   background: rgba(3, 12, 17, 0.72);
 }
 
-.toggle input::after {
+.toggle input::after,
+.toggle-card input::after {
   width: 12px;
   height: 12px;
   background: var(--accent);
@@ -499,12 +525,14 @@ select {
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
-.toggle input:checked::after {
+.toggle input:checked::after,
+.toggle-card input:checked::after {
   opacity: 1;
   transform: scale(1);
 }
 
-.toggle input:disabled {
+.toggle input:disabled,
+.toggle-card input:disabled {
   opacity: 0.52;
 }
 
@@ -1402,6 +1430,8 @@ select {
 
 .board-stage-wrap {
   grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
   position: relative;
 }
 
@@ -1524,6 +1554,27 @@ select {
 .leaderboard-row.self {
   border-color: rgba(72, 208, 187, 0.44);
   background: rgba(72, 208, 187, 0.08);
+}
+
+.leaderboard-row.developer-row {
+  border-color: rgba(255, 101, 124, 0.62);
+  box-shadow: 0 0 18px rgba(255, 101, 124, 0.24);
+}
+
+.leaderboard-row em {
+  display: inline-grid;
+  place-items: center;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 101, 124, 0.58);
+  border-radius: 999px;
+  color: #ffd8de;
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0;
+  background: rgba(255, 101, 124, 0.14);
+  box-shadow: 0 0 14px rgba(255, 101, 124, 0.28);
 }
 
 .leaderboard-row span {
@@ -1871,12 +1922,6 @@ select {
   background: rgba(255, 255, 255, 0.045);
 }
 
-.toggle-card input {
-  width: 28px;
-  height: 28px;
-  margin: 0;
-}
-
 .toggle-card span {
   display: grid;
   gap: 2px;
@@ -1894,6 +1939,10 @@ select {
 
 .compact-toggle {
   margin: 0;
+}
+
+.toggle-card.achievement-reveal-toggle {
+  margin-bottom: 14px;
 }
 
 .admin-status-grid {
@@ -2041,6 +2090,10 @@ select {
     display: none;
   }
 
+  .brand .version-badge small {
+    display: block;
+  }
+
   .player-chip {
     max-width: 38vw;
     overflow: hidden;
@@ -2156,6 +2209,25 @@ select {
 
   .battle-board-stage .board-grid {
     width: max(calc(100dvw - 44px), calc(var(--board-size) * 18px));
+  }
+
+  .battle-social-panel {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .reaction-row {
+    grid-template-columns: repeat(2, 38px);
+  }
+
+  .reaction-button {
+    width: 38px;
+    min-height: 38px;
+    border-radius: 10px;
+  }
+
+  .chat-log {
+    max-height: 96px;
   }
 }
 
@@ -2419,5 +2491,15 @@ select {
   100% {
     opacity: 0;
     transform: scale(2.4);
+  }
+}
+
+@keyframes prestige-fire {
+  0%,
+  100% {
+    text-shadow: 0 0 8px rgba(255, 105, 38, 0.5), 0 0 18px rgba(255, 176, 74, 0.24);
+  }
+  50% {
+    text-shadow: 0 0 12px rgba(255, 105, 38, 0.78), 0 0 26px rgba(255, 176, 74, 0.42);
   }
 }

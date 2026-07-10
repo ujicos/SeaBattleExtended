@@ -85,10 +85,6 @@ export function ProfilePanel({
             onChange={(event) => onProfileChange({ ...profile, displayName: event.target.value })}
           />
         </label>
-        <label className="field">
-          Avatar token
-          <input value={profile.avatar} maxLength={18} onChange={(event) => onProfileChange({ ...profile, avatar: event.target.value })} />
-        </label>
         <div className="action-row">
           <button
             className="icon-button"
