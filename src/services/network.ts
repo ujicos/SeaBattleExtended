@@ -71,7 +71,11 @@ export function clearAdminToken(): void {
 
 function signalingHttpUrl(pathname: string, signalingUrl = defaultSignalingUrl): URL {
   const url = new URL(signalingUrl);
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  if (url.protocol === "wss:") {
+    url.protocol = "https:";
+  } else if (url.protocol === "ws:") {
+    url.protocol = "http:";
+  }
   url.pathname = pathname;
   url.search = "";
   return url;
