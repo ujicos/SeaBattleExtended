@@ -17,6 +17,7 @@ function duration(ms: number | null): string {
 
 export function StatsPanel({
   stats,
+  displayName,
   onRemoveMatch,
   onResetStats,
   onPrestige,
@@ -25,6 +26,7 @@ export function StatsPanel({
   onPrestigePreviewChange
 }: {
   stats: PlayerStats;
+  displayName: string;
   onRemoveMatch?: (matchId: string) => void;
   onResetStats?: () => void;
   onPrestige?: () => void;
@@ -58,6 +60,8 @@ export function StatsPanel({
   const leaderboardPageCount = Math.max(1, Math.ceil(visibleGlobalLeaderboard.length / leaderboardPageSize));
   const leaderboardStart = leaderboardPage * leaderboardPageSize;
   const leaderboardPlayers = visibleGlobalLeaderboard.slice(leaderboardStart, leaderboardStart + leaderboardPageSize);
+  const previewPrestige = prestigePreview ?? stats.prestige;
+  const previewNameClass = previewPrestige > 0 ? `prestige-name prestige-${Math.min(10, previewPrestige)}` : undefined;
 
   useEffect(() => {
     let active = true;
@@ -103,18 +107,21 @@ export function StatsPanel({
         </button>
       )}
       {onPrestigePreviewChange && (
-        <label className="field prestige-preview-field">
-          Prestige effect preview
-          <select
-            value={prestigePreview ?? ""}
-            onChange={(event) => onPrestigePreviewChange(event.target.value === "" ? null : Number(event.target.value))}
-          >
-            <option value="">Actual prestige</option>
-            {Array.from({ length: 11 }, (_, prestige) => (
-              <option value={prestige} key={prestige}>Preview prestige {prestige}</option>
-            ))}
-          </select>
-        </label>
+        <div className="prestige-preview-field">
+          <strong className={`prestige-preview-name ${previewNameClass ?? ""}`}>{displayName}</strong>
+          <label className="field">
+            Prestige effect preview
+            <select
+              value={prestigePreview ?? ""}
+              onChange={(event) => onPrestigePreviewChange(event.target.value === "" ? null : Number(event.target.value))}
+            >
+              <option value="">Actual prestige</option>
+              {Array.from({ length: 10 }, (_, index) => index + 1).map((prestige) => (
+                <option value={prestige} key={prestige}>Preview prestige {prestige}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       )}
       <div className="stats-grid">
         {statCards.map(([label, value]) => (

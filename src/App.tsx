@@ -2845,6 +2845,7 @@ function App() {
       {activeTab === "stats" && (
         <StatsPanel
           stats={stats}
+          displayName={profile.displayName}
           showHiddenLeaderboardEntries={adminVerified}
           prestigePreview={adminVerified ? prestigePreview : null}
           onPrestigePreviewChange={adminVerified ? setPrestigePreview : undefined}

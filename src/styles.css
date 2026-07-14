@@ -1577,6 +1577,18 @@ select {
   cursor: not-allowed;
 }
 
+.prestige-preview-field {
+  display: grid;
+  gap: 8px;
+}
+
+.prestige-preview-name {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 1.5rem;
+  line-height: 1.15;
+}
+
 .history {
   display: grid;
   gap: 8px;
