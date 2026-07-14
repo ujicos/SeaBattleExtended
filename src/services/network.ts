@@ -55,7 +55,7 @@ export function loadAdminToken(): { token: string; remembered: boolean } {
 }
 
 export function saveAdminToken(token: string, remember: boolean): void {
-  const trimmed = token.trim();
+  const trimmed = normalizeAdminToken(token);
   sessionStorage.setItem(adminTokenSessionKey, trimmed);
   if (remember) {
     localStorage.setItem(adminTokenLocalKey, trimmed);
@@ -67,6 +67,10 @@ export function saveAdminToken(token: string, remember: boolean): void {
 export function clearAdminToken(): void {
   sessionStorage.removeItem(adminTokenSessionKey);
   localStorage.removeItem(adminTokenLocalKey);
+}
+
+function normalizeAdminToken(token: string): string {
+  return token.trim().replace(/^Bearer\s+/i, "").trim();
 }
 
 function signalingHttpUrl(pathname: string, signalingUrl = defaultSignalingUrl): URL {
@@ -160,12 +164,14 @@ async function fetchAdmin<T>(
   signalingUrl = defaultSignalingUrl
 ): Promise<T> {
   const url = signalingHttpUrl(pathname, signalingUrl);
+  const adminToken = normalizeAdminToken(token);
   const response = await fetch(url.toString(), {
     ...init,
     cache: "no-store",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${token}`,
+      authorization: `Bearer ${adminToken}`,
+      "x-admin-token": adminToken,
       ...init.headers
     }
   });

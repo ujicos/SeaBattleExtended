@@ -53,16 +53,32 @@ function json(data: unknown, init?: ResponseInit): Response {
   });
 }
 
-function unauthorized(): Response {
-  return json({ ok: false, error: "Admin token required" }, { status: 401 });
+function adminAuthError(request: Request, env: Env): Response | null {
+  const expectedToken = env.ADMIN_TOKEN?.trim();
+  if (!expectedToken) {
+    return json({ ok: false, error: "Admin token is not configured on the Worker" }, { status: 503 });
+  }
+
+  const providedToken = readAdminToken(request);
+  if (!providedToken) {
+    return json({ ok: false, error: "Admin token required" }, { status: 401 });
+  }
+
+  if (providedToken !== expectedToken) {
+    return json({ ok: false, error: "Admin token invalid" }, { status: 403 });
+  }
+
+  return null;
 }
 
-function hasAdminAccess(request: Request, env: Env): boolean {
-  const token = env.ADMIN_TOKEN;
-  if (!token) {
-    return false;
+function readAdminToken(request: Request): string {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  const bearer = /^Bearer\s+(.+)$/i.exec(authorization)?.[1]?.trim();
+  if (bearer) {
+    return bearer;
   }
-  return request.headers.get("authorization") === `Bearer ${token}`;
+
+  return request.headers.get("x-admin-token")?.trim() ?? "";
 }
 
 async function ensureLeaderboard(env: Env): Promise<boolean> {
@@ -207,7 +223,7 @@ export default {
         headers: {
           "access-control-allow-origin": "*",
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-          "access-control-allow-headers": "authorization, content-type"
+          "access-control-allow-headers": "authorization, content-type, x-admin-token"
         }
       });
     }
@@ -221,8 +237,9 @@ export default {
     }
 
     if (url.pathname.startsWith("/admin")) {
-      if (!hasAdminAccess(request, env)) {
-        return unauthorized();
+      const authError = adminAuthError(request, env);
+      if (authError) {
+        return authError;
       }
       const registry = env.LOBBIES.get(env.LOBBIES.idFromName("global"));
 
